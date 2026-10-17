@@ -263,4 +263,3 @@ func _change_level(exit_id: String, target_level_path: String, target_entrance_i
 
 	# No valid target: return the player to the target entrance on this level.
 	spawn_player(target_entrance_id)
-

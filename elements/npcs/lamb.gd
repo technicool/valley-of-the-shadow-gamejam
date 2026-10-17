@@ -20,6 +20,7 @@ const TURN_SPEED := 6.0
 @export var wander_radius := 7.0
 @export var idle_min := 1.5
 @export var idle_max := 4.0
+@export var penned := false
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _rng := RandomNumberGenerator.new()
@@ -75,6 +76,9 @@ func _physics_process(delta: float) -> void:
 
 
 func _update_follow_state(player: Node3D) -> void:
+	if penned:
+		_following = false
+		return
 	var dist := global_position.distance_to(player.global_position)
 	if not _following and dist <= FOLLOW_ENTER_RANGE:
 		_following = true

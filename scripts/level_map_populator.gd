@@ -1,16 +1,14 @@
-@tool
 class_name LevelMapPopulator
 extends Node3D
-## Level Populator and Editor Tool for Godot.
-##
-## Syncs a 2D TileMapLayer (used in editor for painting terrain, debris, and objects)
-## with the 3D game world and LevelData resource.
-## Also builds the procedural 3D block terrain, spawns static scenery (trees, rocks, debris),
-## places weapon pickups, and instantiates enemy guard zones with barrier gates.
+## Generates and populates a bezier valley section at runtime before rendering:
+## - Single obvious winding green grass trail forward
+## - Textured muddy floor covering the valley ground level between the walls
+## - Left and right valley cliff walls with a cave entrance cut out directly into the wall
+## - Opening meadow sheep pen & target practice in section 0, weapon pickups, and enemy guard zone
 
 signal level_exit_triggered(exit_id: String, target_level_path: String, target_entrance_id: String)
 
-const PLAYER_LAYER := 2  # Matches collision_layer in scenes/player.tscn.
+const PLAYER_LAYER := 2
 const WEAPON_SCENES := {
 	"ancient_blade": preload("res://elements/weapons/sword.tscn"),
 	"greatsword": preload("res://elements/weapons/sword.tscn"),
@@ -23,74 +21,40 @@ const GUARD_CREATURE_SCENES: Array[PackedScene] = [
 	preload("res://elements/enemies/bear.tscn"),
 ]
 const LAMB_SCENE := preload("res://elements/npcs/lamb.tscn")
-const LAMB_COUNT := 6
-const LAMB_MIN_SPACING := 3.0
-const LAMB_MIN_START_DIST := 4.0
-const LAMB_MAX_START_DIST := 16.0
-const LAMB_GUARD_CLEARANCE := 8.0
+const PRACTICE_TARGET_SCRIPT := preload("res://elements/weapons/practice_target.gd")
+const LAMB_COUNT := 5
+const CAVE_HOLE_HEIGHT := 3.1
+const CAVE_HOLE_HALF_Z := 1.4
+const CAVE_TUNNEL_DEPTH := 3.2
 
 @export_group("Data & Generation")
-@export var level_data: LevelData:
-	set(val):
-		level_data = val
-		if Engine.is_editor_hint() and level_data:
-			sync_to_tilemap()
-
+@export var level_data: LevelData
 @export var generation_mode: LevelMapGenerator.GenerationMode = LevelMapGenerator.GenerationMode.LINEAR_PATH
 @export var world_seed: int = 1337
 @export var section_index: int = 0
 @export var section_length: int = 50
+@export var section_width: int = 80
 @export var auto_rebuild_on_ready: bool = true
-
-@export_group("Editor Actions")
-@export var generate_level_button: bool = false:
-	set(_v):
-		generate_level_data()
-
-@export var rebuild_3d_world_button: bool = false:
-	set(_v):
-		rebuild_all()
-
-@export var sync_from_tilemap_button: bool = false:
-	set(_v):
-		sync_from_tilemap()
-		rebuild_all()
 
 @export_group("Scenery Prefabs / Meshes")
 @export var weapon_item_scene: PackedScene
 @export var enemy_guard_scene: PackedScene
 
-# Internal node references
 var _terrain_node: Node3D
 var _props_node: Node3D
 var _gameplay_node: Node3D
-var _tilemap_layer: TileMapLayer
 
 
 func _ready() -> void:
 	_ensure_subnodes()
-	if level_data == null:
-		generate_level_data()
-		return
-	# Only fill an empty paint layer so saved paint is not overwritten.
-	if Engine.is_editor_hint() and _tilemap_layer and _tilemap_layer.get_used_cells().is_empty():
-		sync_to_tilemap()
 	if auto_rebuild_on_ready:
-		rebuild_all()
+		if level_data == null or level_data.bezier_path_x.is_empty():
+			generate_level_data()
+		else:
+			rebuild_all()
 
 
 func _ensure_subnodes() -> void:
-	if not _tilemap_layer:
-		_tilemap_layer = get_node_or_null("TerrainTileMap") as TileMapLayer
-		if not _tilemap_layer and Engine.is_editor_hint():
-			_tilemap_layer = TileMapLayer.new()
-			_tilemap_layer.name = "TerrainTileMap"
-			add_child(_tilemap_layer)
-			_tilemap_layer.owner = get_tree().edited_scene_root
-	# A 2D layer would draw over the 3D view at runtime.
-	if _tilemap_layer and not Engine.is_editor_hint():
-		_tilemap_layer.visible = false
-
 	if not _terrain_node:
 		_terrain_node = _get_or_add_container("GeneratedTerrain")
 	if not _props_node:
@@ -108,166 +72,327 @@ func _get_or_add_container(container_name: String) -> Node3D:
 	return container
 
 
-## Generate LevelData procedurally using FastNoiseLite and current mode
+## Generates LevelData at runtime right before building the 3D geometry
 func generate_level_data() -> void:
 	_ensure_subnodes()
 	var gen := LevelMapGenerator.new()
-	var w := 80
-	var d := section_length
-	if level_data:
-		w = level_data.width
-		d = level_data.depth
-	level_data = gen.generate(generation_mode, world_seed, w, d, section_index)
-	sync_to_tilemap()
+	level_data = gen.generate(generation_mode, world_seed, section_width, section_length, section_index)
 	rebuild_all()
 
 
-## Sync LevelData into 2D TileMapLayer for visual inspection/editing in Godot editor
-func sync_to_tilemap() -> void:
-	if not _tilemap_layer or not level_data:
-		return
-	_ensure_tileset()
-	_tilemap_layer.clear()
-
-	for y in range(level_data.depth):
-		for x in range(level_data.width):
-			var terrain := level_data.get_cell_terrain(x, y)
-			# Atlas coordinate maps to terrain type
-			_tilemap_layer.set_cell(Vector2i(x, y), 0, Vector2i(terrain, 0))
-
-
-## Read changes painted by designer in TileMapLayer back into LevelData
-func sync_from_tilemap() -> void:
-	if not _tilemap_layer or not level_data:
-		return
-	for y in range(level_data.depth):
-		for x in range(level_data.width):
-			var atlas_coord := _tilemap_layer.get_cell_atlas_coords(Vector2i(x, y))
-			if atlas_coord != Vector2i(-1, -1):
-				level_data.set_cell_terrain(x, y, atlas_coord.x)
-
-
-func _ensure_tileset() -> void:
-	if _tilemap_layer.tile_set != null:
-		return
-	var ts := TileSet.new()
-	ts.tile_size = Vector2i(16, 16)
-	var source := TileSetAtlasSource.new()
-	var img := Image.create(16 * 6, 16, false, Image.FORMAT_RGBA8)
-	var colors := [
-		Color("#6f7a3b"), # Grass (olive moss)
-		Color("#4a3828"), # Mud
-		Color("#8c7152"), # Debris
-		Color("#a57048"), # Dirt (ochre)
-		Color("#7f766c"), # Stone
-		Color("#3d5a70"), # Water
-	]
-	for idx in range(colors.size()):
-		var c: Color = colors[idx]
-		for py in range(16):
-			for px in range(16):
-				img.set_pixel(idx * 16 + px, py, c)
-	var tex := ImageTexture.create_from_image(img)
-	source.texture = tex
-	source.texture_region_size = Vector2i(16, 16)
-	for idx in range(6):
-		source.create_tile(Vector2i(idx, 0))
-	ts.add_source(source)
-	_tilemap_layer.tile_set = ts
-
-
-## Rebuilds the entire 3D level: terrain geometry, static scenery, weapons, enemies, and exits
+## Rebuilds the 3D valley: bezier terrain & walls, cave hole cutout, and gameplay elements
 func rebuild_all() -> void:
 	_ensure_subnodes()
-	if level_data == null:
-		return
+	if level_data == null or level_data.bezier_path_x.is_empty():
+		var gen := LevelMapGenerator.new()
+		level_data = gen.generate(generation_mode, world_seed, section_width, section_length, section_index)
 	_build_3d_terrain()
-	_populate_static_objects()
+	_clear_children(_props_node)
 	_populate_gameplay_elements()
 
 
 func _clear_children(node: Node) -> void:
-	# Detach immediately so stale colliders are gone before the rebuild.
 	for child in node.get_children():
 		node.remove_child(child)
 		child.queue_free()
 
 
-## Builds the 3D block mesh with stepped heights and custom terrain textures
+## Builds the single bezier path forward, muddy valley floor, left & right cliff walls, and cutout cave hole
 func _build_3d_terrain() -> void:
 	_clear_children(_terrain_node)
 	var w := level_data.width
 	var d := level_data.depth
-	var step_h := level_data.step_height
 	var block_size := level_data.cell_size
 	var half_w := w * 0.5 * block_size
 	var half_d := d * 0.5 * block_size
 
-	var num_types := 6
-	var tools: Array[SurfaceTool] = []
-	for i in num_types:
-		var st := SurfaceTool.new()
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		tools.append(st)
+	var grass_st := SurfaceTool.new()
+	var mud_st := SurfaceTool.new()
+	var stone_st := SurfaceTool.new()
+	var void_st := SurfaceTool.new()
+	grass_st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	mud_st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	stone_st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	void_st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	var side_normals := [Vector3.RIGHT, Vector3.LEFT, Vector3.BACK, Vector3.FORWARD]
-	var side_offsets := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
-	var rng := RandomNumberGenerator.new()
-	rng.seed = world_seed
+	# Locate cave entrance row & side so the hole is carved directly out of that side wall
+	var cave_y := -999.0
+	var cave_side := 0
+	for exit_item: LevelExitData in level_data.exits:
+		if exit_item.is_cave_entrance or SidequestManager.is_sidequest_target(exit_item.target_level_path):
+			cave_y = float(exit_item.grid_pos.y) + 0.5
+			cave_side = exit_item.cave_side
+			if cave_side == 0:
+				cave_side = -1 if exit_item.grid_pos.x < w / 2 else 1
+			break
 
-	for y in range(d):
-		for x in range(w):
-			var t_type := clampi(level_data.get_cell_terrain(x, y), 0, num_types - 1)
-			var elev := level_data.get_cell_elevation(x, y)
-			var top_y := elev * step_h
-			var center := Vector3((x + 0.5) * block_size - half_w, top_y, (y + 0.5) * block_size - half_d)
-			var st: SurfaceTool = tools[t_type]
-			var shade := rng.randf_range(0.9, 1.05)
+	var sub_steps := 4
+	var total_slices := d * sub_steps
+	var cave_z_min_t := cave_y - CAVE_HOLE_HALF_Z
+	var cave_z_max_t := cave_y + CAVE_HOLE_HALF_Z
 
-			# Top quad
-			var half := block_size * 0.5
-			var corners := PackedVector3Array([
-				Vector3(center.x - half, center.y, center.z - half),
-				Vector3(center.x + half, center.y, center.z - half),
-				Vector3(center.x + half, center.y, center.z + half),
-				Vector3(center.x - half, center.y, center.z + half),
-			])
-			_add_quad_to_tool(st, corners, Vector3.UP, Color(shade, shade, shade), 1.0)
+	for s in range(total_slices):
+		var t0 := float(s) / float(sub_steps)
+		var t1 := float(s + 1) / float(sub_steps)
+		var mid_t := (t0 + t1) * 0.5
+		var z0 := t0 * block_size - half_d
+		var z1 := t1 * block_size - half_d
 
-			# Side quads
-			for s in side_normals.size():
-				var offset: Vector2i = side_offsets[s]
-				var nx := x + offset.x
-				var ny := y + offset.y
-				var neighbor_elev := 0
-				if nx >= 0 and nx < w and ny >= 0 and ny < d:
-					neighbor_elev = level_data.get_cell_elevation(nx, ny)
-				elif nx >= 0 and nx < w and (ny < 0 or ny >= d):
-					neighbor_elev = elev
-				var neighbor_top := neighbor_elev * step_h
-				if neighbor_top < top_y:
-					var normal: Vector3 = side_normals[s]
-					var along := Vector3(-normal.z, 0.0, normal.x) * half
-					var edge := Vector3(center.x, 0.0, center.z) + normal * half
-					var lo := edge + Vector3(0.0, neighbor_top, 0.0)
-					var hi := edge + Vector3(0.0, top_y, 0.0)
-					var side_corners := PackedVector3Array([lo - along, lo + along, hi + along, hi - along])
-					_add_quad_to_tool(st, side_corners, normal, Color(shade * 0.8, shade * 0.8, shade * 0.8), top_y - neighbor_top)
+		var p0 := _eval_catmull_x(level_data.bezier_path_x, t0, d) * block_size - half_w
+		var p1 := _eval_catmull_x(level_data.bezier_path_x, t1, d) * block_size - half_w
+		var th0 := _eval_catmull_x(level_data.bezier_trail_half_w, t0, d) * block_size
+		var th1 := _eval_catmull_x(level_data.bezier_trail_half_w, t1, d) * block_size
+
+		var li0 := _eval_catmull_x(level_data.bezier_left_wall_inner_x, t0, d) * block_size - half_w
+		var li1 := _eval_catmull_x(level_data.bezier_left_wall_inner_x, t1, d) * block_size - half_w
+		var ri0 := _eval_catmull_x(level_data.bezier_right_wall_inner_x, t0, d) * block_size - half_w
+		var ri1 := _eval_catmull_x(level_data.bezier_right_wall_inner_x, t1, d) * block_size - half_w
+
+		var lo0 := -half_w
+		var lo1 := -half_w
+		var ro0 := half_w
+		var ro1 := half_w
+
+		var fy0 := _eval_catmull_x(level_data.bezier_floor_y, t0, d)
+		var fy1 := _eval_catmull_x(level_data.bezier_floor_y, t1, d)
+
+		var lh0 := fy0 + maxf(CAVE_HOLE_HEIGHT + 1.4, _eval_catmull_x(level_data.bezier_left_wall_height, t0, d))
+		var lh1 := fy1 + maxf(CAVE_HOLE_HEIGHT + 1.4, _eval_catmull_x(level_data.bezier_left_wall_height, t1, d))
+		var rh0 := fy0 + maxf(CAVE_HOLE_HEIGHT + 1.4, _eval_catmull_x(level_data.bezier_right_wall_height, t0, d))
+		var rh1 := fy1 + maxf(CAVE_HOLE_HEIGHT + 1.4, _eval_catmull_x(level_data.bezier_right_wall_height, t1, d))
+
+		var tl0 := maxf(li0, p0 - th0)
+		var tr0 := minf(ri0, p0 + th0)
+		var tl1 := maxf(li1, p1 - th1)
+		var tr1 := minf(ri1, p1 + th1)
+
+		var g_col0 := _sample_grass_vcol(t0)
+		var g_col1 := _sample_grass_vcol(t1)
+		var m_col := Color(0.95, 0.92, 0.88)
+
+		# 1. Full muddy ground base covering the entire valley floor from left wall to right wall (with under-wall margin)
+		_add_strip_quad(
+			mud_st,
+			Vector3(li0 - 1.5, fy0, z0),
+			Vector3(ri0 + 1.5, fy0, z0),
+			Vector3(ri1 + 1.5, fy1, z1),
+			Vector3(li1 - 1.5, fy1, z1),
+			m_col,
+			m_col,
+			0.25
+		)
+
+		# 2. Single obvious textured green grass path forward down the valley (plus opening meadow in section 0)
+		_add_strip_quad(
+			grass_st,
+			Vector3(tl0, fy0 + 0.015, z0),
+			Vector3(tr0, fy0 + 0.015, z0),
+			Vector3(tr1, fy1 + 0.015, z1),
+			Vector3(tl1, fy1 + 0.015, z1),
+			g_col0,
+			g_col1,
+			0.25
+		)
+
+		var in_cave_hole := mid_t >= cave_z_min_t and mid_t <= cave_z_max_t
+
+		# 3. Left valley wall (with cutout hole if cave is on the left side)
+		var l_crest0 := li0 - 1.2
+		var l_crest1 := li1 - 1.2
+		if in_cave_hole and cave_side < 0:
+			var hole_top0 := fy0 + CAVE_HOLE_HEIGHT
+			var hole_top1 := fy1 + CAVE_HOLE_HEIGHT
+			var recess0 := li0 - CAVE_TUNNEL_DEPTH
+			var recess1 := li1 - CAVE_TUNNEL_DEPTH
+			# Upper cliff wall bridging over the cutout cave hole
+			_add_strip_quad(
+				stone_st,
+				Vector3(l_crest0, lh0, z0),
+				Vector3(li0, hole_top0, z0),
+				Vector3(li1, hole_top1, z1),
+				Vector3(l_crest1, lh1, z1),
+				Color(0.90, 0.88, 0.86),
+				Color(0.90, 0.88, 0.86),
+				lh0 - hole_top0
+			)
+			# Cutout cave ceiling inside the wall
+			_add_strip_quad(
+				stone_st,
+				Vector3(li0, hole_top0, z0),
+				Vector3(recess0, hole_top0, z0),
+				Vector3(recess1, hole_top1, z1),
+				Vector3(li1, hole_top1, z1),
+				Color(0.65, 0.63, 0.60),
+				Color(0.65, 0.63, 0.60),
+				0.25
+			)
+			# Grass floor extending 3m into the cutout cave hole
+			_add_strip_quad(
+				grass_st,
+				Vector3(recess0, fy0 + 0.018, z0),
+				Vector3(li0 + 0.4, fy0 + 0.018, z0),
+				Vector3(li1 + 0.4, fy1 + 0.018, z1),
+				Vector3(recess1, fy1 + 0.018, z1),
+				g_col0,
+				g_col1,
+				0.25
+			)
+			# Dark back wall inside the cave cutout
+			_add_strip_quad(
+				void_st,
+				Vector3(recess0, hole_top0, z0),
+				Vector3(recess0, fy0, z0),
+				Vector3(recess1, fy1, z1),
+				Vector3(recess1, hole_top1, z1),
+				Color.BLACK,
+				Color.BLACK,
+				1.0
+			)
+		else:
+			_add_strip_quad(
+				stone_st,
+				Vector3(l_crest0, lh0, z0),
+				Vector3(li0, fy0 - 0.15, z0),
+				Vector3(li1, fy1 - 0.15, z1),
+				Vector3(l_crest1, lh1, z1),
+				Color(0.92, 0.90, 0.88),
+				Color(0.92, 0.90, 0.88),
+				lh0 - fy0
+			)
+
+		# Left wall rocky plateau extending to the left edge of the section
+		_add_strip_quad(
+			stone_st,
+			Vector3(lo0, lh0 + 0.6, z0),
+			Vector3(l_crest0, lh0, z0),
+			Vector3(l_crest1, lh1, z1),
+			Vector3(lo1, lh1 + 0.6, z1),
+			Color(0.78, 0.76, 0.73),
+			Color(0.78, 0.76, 0.73),
+			0.25
+		)
+
+		# 4. Right valley wall (with cutout hole if cave is on the right side)
+		var r_crest0 := ri0 + 1.2
+		var r_crest1 := ri1 + 1.2
+		if in_cave_hole and cave_side > 0:
+			var hole_top0 := fy0 + CAVE_HOLE_HEIGHT
+			var hole_top1 := fy1 + CAVE_HOLE_HEIGHT
+			var recess0 := ri0 + CAVE_TUNNEL_DEPTH
+			var recess1 := ri1 + CAVE_TUNNEL_DEPTH
+			# Upper cliff wall bridging over the cutout cave hole
+			_add_strip_quad(
+				stone_st,
+				Vector3(ri0, hole_top0, z0),
+				Vector3(r_crest0, rh0, z0),
+				Vector3(r_crest1, rh1, z1),
+				Vector3(ri1, hole_top1, z1),
+				Color(0.90, 0.88, 0.86),
+				Color(0.90, 0.88, 0.86),
+				rh0 - hole_top0
+			)
+			# Cutout cave ceiling inside the wall
+			_add_strip_quad(
+				stone_st,
+				Vector3(recess0, hole_top0, z0),
+				Vector3(ri0, hole_top0, z0),
+				Vector3(ri1, hole_top1, z1),
+				Vector3(recess1, hole_top1, z1),
+				Color(0.65, 0.63, 0.60),
+				Color(0.65, 0.63, 0.60),
+				0.25
+			)
+			# Grass floor extending 3m into the cutout cave hole
+			_add_strip_quad(
+				grass_st,
+				Vector3(ri0 - 0.4, fy0 + 0.018, z0),
+				Vector3(recess0, fy0 + 0.018, z0),
+				Vector3(recess1, fy1 + 0.018, z1),
+				Vector3(ri1 - 0.4, fy1 + 0.018, z1),
+				g_col0,
+				g_col1,
+				0.25
+			)
+			# Dark back wall inside the cave cutout
+			_add_strip_quad(
+				void_st,
+				Vector3(recess0, fy0, z0),
+				Vector3(recess0, hole_top0, z0),
+				Vector3(recess1, hole_top1, z1),
+				Vector3(recess1, fy1, z1),
+				Color.BLACK,
+				Color.BLACK,
+				1.0
+			)
+		else:
+			_add_strip_quad(
+				stone_st,
+				Vector3(ri0, fy0 - 0.15, z0),
+				Vector3(r_crest0, rh0, z0),
+				Vector3(r_crest1, rh1, z1),
+				Vector3(ri1, fy1 - 0.15, z1),
+				Color(0.92, 0.90, 0.88),
+				Color(0.92, 0.90, 0.88),
+				rh0 - fy0
+			)
+
+		# Right wall rocky plateau extending to the right edge of the section
+		_add_strip_quad(
+			stone_st,
+			Vector3(r_crest0, rh0, z0),
+			Vector3(ro0, rh0 + 0.6, z0),
+			Vector3(ro1, rh1 + 0.6, z1),
+			Vector3(r_crest1, rh1, z1),
+			Color(0.78, 0.76, 0.73),
+			Color(0.78, 0.76, 0.73),
+			0.25
+		)
+
+	# 5. Side jamb walls sealing the Z-sides of the cutout cave hole inside the cliff wall
+	if cave_side != 0 and cave_y > 0.0:
+		for boundary_t: float in [cave_z_min_t, cave_z_max_t]:
+			var bz := boundary_t * block_size - half_d
+			var bfy := _eval_catmull_x(level_data.bezier_floor_y, boundary_t, d)
+			var btop := bfy + CAVE_HOLE_HEIGHT
+			if cave_side < 0:
+				var bli := _eval_catmull_x(level_data.bezier_left_wall_inner_x, boundary_t, d) * block_size - half_w
+				var brec := bli - CAVE_TUNNEL_DEPTH
+				_add_strip_quad(
+					stone_st,
+					Vector3(brec, bfy, bz),
+					Vector3(bli, bfy, bz),
+					Vector3(bli, btop, bz),
+					Vector3(brec, btop, bz),
+					Color(0.72, 0.70, 0.67),
+					Color(0.72, 0.70, 0.67),
+					CAVE_HOLE_HEIGHT
+				)
+			else:
+				var bri := _eval_catmull_x(level_data.bezier_right_wall_inner_x, boundary_t, d) * block_size - half_w
+				var brec := bri + CAVE_TUNNEL_DEPTH
+				_add_strip_quad(
+					stone_st,
+					Vector3(bri, bfy, bz),
+					Vector3(brec, bfy, bz),
+					Vector3(brec, btop, bz),
+					Vector3(bri, btop, bz),
+					Color(0.72, 0.70, 0.67),
+					Color(0.72, 0.70, 0.67),
+					CAVE_HOLE_HEIGHT
+				)
+
+	# 6. Smooth bezier grass branch ribbon connecting the main trail to the cave cutout hole
+	_append_cave_branch_ribbon(grass_st, half_w, half_d, block_size)
 
 	var mesh := ArrayMesh.new()
-	var colors := [
-		Color("#6f7a3b"), Color("#4a3828"), Color("#8c7152"),
-		Color("#a57048"), Color("#7f766c"), Color("#3d5a70")
-	]
+	var mats := _create_terrain_materials()
+	var st_list: Array[SurfaceTool] = [grass_st, mud_st, stone_st, void_st]
 	var surface_idx := 0
-	for i in num_types:
-		var initial_surf_count := mesh.get_surface_count()
-		tools[i].commit(mesh)
-		if mesh.get_surface_count() > initial_surf_count:
-			var mat := StandardMaterial3D.new()
-			mat.albedo_color = colors[i]
-			mat.roughness = 0.85
-			mesh.surface_set_material(surface_idx, mat)
+	for i in range(st_list.size()):
+		var prev_count := mesh.get_surface_count()
+		st_list[i].commit(mesh)
+		if mesh.get_surface_count() > prev_count:
+			mesh.surface_set_material(surface_idx, mats[i])
 			surface_idx += 1
 
 	var body := StaticBody3D.new()
@@ -284,218 +409,267 @@ func _build_3d_terrain() -> void:
 	visual.mesh = mesh
 	_terrain_node.add_child(visual)
 
-
-func _add_quad_to_tool(st: SurfaceTool, corners: PackedVector3Array, normal: Vector3, color: Color, uv_v: float) -> void:
-	var uvs := [Vector2(0.0, 0.0), Vector2(1.0, 0.0), Vector2(1.0, uv_v), Vector2(0.0, uv_v)]
-	var order := [0, 1, 2, 0, 2, 3]
-	if (corners[1] - corners[0]).cross(corners[2] - corners[0]).dot(normal) > 0.0:
-		order = [0, 2, 1, 0, 3, 2]
-	st.set_normal(normal)
-	st.set_color(color)
-	for idx in order:
-		st.set_uv(uvs[idx])
-		st.add_vertex(corners[idx])
+	_populate_grass_blades()
 
 
-## Populates static scenery (debris, trees, rocks, pillars)
-func _populate_static_objects() -> void:
-	_clear_children(_props_node)
+## Catmull-Rom spline evaluation on a (d + 1) profile array for smooth C1 bezier curves
+func _eval_catmull_x(arr: PackedFloat32Array, t: float, d: int) -> float:
+	if arr.is_empty():
+		return 0.0
+	var clamped := clampf(t, 0.0, float(d))
+	var i1 := clampi(int(floor(clamped)), 0, d)
+	var i2 := clampi(i1 + 1, 0, d)
+	var i0 := clampi(i1 - 1, 0, d)
+	var i3 := clampi(i2 + 1, 0, d)
+	var f := clamped - float(i1)
+	var p0 := arr[i0]
+	var p1 := arr[i1]
+	var p2 := arr[i2]
+	var p3 := arr[i3]
+	var f2 := f * f
+	var f3 := f2 * f
+	return 0.5 * ((2.0 * p1) + (-p0 + p2) * f + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * f2 + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * f3)
+
+
+func _sample_grass_vcol(t: float) -> Color:
+	var wave := sin(t * 0.45 + float(world_seed % 71)) * 0.06
+	return Color(
+		clampf(0.88 + wave * 0.35, 0.78, 1.02),
+		clampf(0.97 + wave, 0.86, 1.06),
+		clampf(0.96 - wave * 0.5, 0.84, 1.08)
+	)
+
+
+func _add_strip_quad(st: SurfaceTool, v0: Vector3, v1: Vector3, v2: Vector3, v3: Vector3, c0: Color, c1: Color, uv_v: float) -> void:
+	var n := (v1 - v0).cross(v3 - v0).normalized()
+	if n.length_squared() < 0.0001:
+		n = Vector3.UP
+	var uv0 := Vector2(v0.x * 0.35, v0.z * 0.35)
+	var uv1 := Vector2(v1.x * 0.35, v1.z * 0.35)
+	var uv2 := Vector2(v2.x * 0.35, v2.z * 0.35)
+	var uv3 := Vector2(v3.x * 0.35, v3.z * 0.35)
+	if absf(n.y) < 0.5:
+		uv0 = Vector2(0.0, 0.0)
+		uv1 = Vector2(1.0, 0.0)
+		uv2 = Vector2(1.0, maxf(1.0, uv_v * 0.35))
+		uv3 = Vector2(0.0, maxf(1.0, uv_v * 0.35))
+
+	st.set_normal(n)
+	st.set_color(c0)
+	st.set_uv(uv0)
+	st.add_vertex(v0)
+	st.set_color(c1)
+	st.set_uv(uv2)
+	st.add_vertex(v2)
+	st.set_color(c0)
+	st.set_uv(uv1)
+	st.add_vertex(v1)
+
+	st.set_normal(n)
+	st.set_color(c0)
+	st.set_uv(uv0)
+	st.add_vertex(v0)
+	st.set_color(c1)
+	st.set_uv(uv3)
+	st.add_vertex(v3)
+	st.set_color(c1)
+	st.set_uv(uv2)
+	st.add_vertex(v2)
+
+
+func _append_cave_branch_ribbon(grass_st: SurfaceTool, half_w: float, half_d: float, block_size: float) -> void:
+	var pts := level_data.bezier_cave_branch_points
+	if pts.size() < 2:
+		return
+	var d := level_data.depth
+	var half_branch := 1.45
+	for i in range(pts.size() - 1):
+		var a := pts[i]
+		var b := pts[i + 1]
+		var wa := Vector3((a.x + 0.5) * block_size - half_w, _eval_catmull_x(level_data.bezier_floor_y, a.y, d) + 0.016, (a.y + 0.5) * block_size - half_d)
+		var wb := Vector3((b.x + 0.5) * block_size - half_w, _eval_catmull_x(level_data.bezier_floor_y, b.y, d) + 0.016, (b.y + 0.5) * block_size - half_d)
+		var dir := (wb - wa)
+		dir.y = 0.0
+		if dir.length_squared() < 0.0001:
+			continue
+		dir = dir.normalized()
+		var perp := Vector3(-dir.z, 0.0, dir.x) * half_branch
+		_add_strip_quad(
+			grass_st,
+			wa - perp,
+			wa + perp,
+			wb + perp,
+			wb - perp,
+			Color(0.92, 1.0, 0.98),
+			Color(0.92, 1.0, 0.98),
+			0.25
+		)
+
+
+func _create_terrain_materials() -> Array[StandardMaterial3D]:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = world_seed + 777
+
+	# 0: Textured blue-green grass
+	var grass_img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	var grass_palette := [
+		Color("#1b8266"),
+		Color("#239676"),
+		Color("#176e57"),
+		Color("#2da884"),
+		Color("#1e8b6c"),
+	]
+	for py in range(16):
+		for px in range(16):
+			var idx := (px * 3 + py * 5 + rng.randi_range(0, 4)) % grass_palette.size()
+			var base_c: Color = grass_palette[idx]
+			if (px + py) % 4 == 0:
+				base_c = base_c.lightened(0.06)
+			elif (px * py) % 7 == 0:
+				base_c = base_c.darkened(0.07)
+			grass_img.set_pixel(px, py, base_c)
+	var grass_tex := ImageTexture.create_from_image(grass_img)
+
+	# 1: Textured muddy floor covering ground level around the grass trail
+	var mud_img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	for py in range(16):
+		for px in range(16):
+			var d_var := rng.randf_range(-0.07, 0.07)
+			var puddle := -0.05 if ((px * 5 + py * 3) % 7 == 0) else 0.0
+			mud_img.set_pixel(px, py, Color(0.48 + d_var + puddle, 0.36 + d_var * 0.8 + puddle, 0.25 + d_var * 0.6 + puddle))
+	var mud_tex := ImageTexture.create_from_image(mud_img)
+
+	# 2: Striated rocky cliff wall texture
+	var stone_img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	for py in range(16):
+		var band := sin(float(py) * 0.9) * 0.07
+		for px in range(16):
+			var grain := rng.randf_range(-0.04, 0.04)
+			var c := Color(0.47 + band + grain, 0.43 + band + grain, 0.39 + band + grain)
+			if py < 2:
+				c = c.lerp(Color("#1f8a6c"), 0.55)
+			stone_img.set_pixel(px, py, c)
+	var stone_tex := ImageTexture.create_from_image(stone_img)
+
+	var grass_mat := StandardMaterial3D.new()
+	grass_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	grass_mat.vertex_color_use_as_albedo = true
+	grass_mat.albedo_color = Color("#249878")
+	grass_mat.albedo_texture = grass_tex
+	grass_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+	grass_mat.roughness = 0.86
+
+	var mud_mat := StandardMaterial3D.new()
+	mud_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mud_mat.vertex_color_use_as_albedo = true
+	mud_mat.albedo_color = Color("#7d5c3f")
+	mud_mat.albedo_texture = mud_tex
+	mud_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+	mud_mat.roughness = 0.90
+
+	var stone_mat := StandardMaterial3D.new()
+	stone_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	stone_mat.vertex_color_use_as_albedo = true
+	stone_mat.albedo_color = Color("#7c736a")
+	stone_mat.albedo_texture = stone_tex
+	stone_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+	stone_mat.roughness = 0.92
+
+	var void_mat := StandardMaterial3D.new()
+	void_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	void_mat.albedo_color = Color(0.02, 0.02, 0.03)
+	void_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+
+	return [grass_mat, mud_mat, stone_mat, void_mat]
+
+
+## Scatters simple 3D triangle/polygon grass blades directly across the bezier grass path
+func _populate_grass_blades() -> void:
 	var w := level_data.width
 	var d := level_data.depth
+	var block_size := level_data.cell_size
+	var half_w := w * 0.5 * block_size
+	var half_d := d * 0.5 * block_size
 	var rng := RandomNumberGenerator.new()
-	rng.seed = world_seed + 99
+	rng.seed = world_seed + 313
 
-	# Materials for scenery
-	var tree_trunk_mat := StandardMaterial3D.new()
-	tree_trunk_mat.albedo_color = Color("#4a3322")
-	var tree_leaves_mat := StandardMaterial3D.new()
-	tree_leaves_mat.albedo_color = Color("#6b7a3f")
-	var rock_mat := StandardMaterial3D.new()
-	rock_mat.albedo_color = Color("#6f6a64")
-	var pillar_mat := StandardMaterial3D.new()
-	pillar_mat.albedo_color = Color("#d9c9a5")
-	var artifact_clay_mat := StandardMaterial3D.new()
-	artifact_clay_mat.albedo_color = Color("#b8784c")
-	var artifact_stone_mat := StandardMaterial3D.new()
-	artifact_stone_mat.albedo_color = Color("#e4d7b6")
+	var transforms: Array[Transform3D] = []
+	var colors: Array[Color] = []
 
 	for y in range(d):
-		for x in range(w):
-			var obj := level_data.get_cell_object(x, y)
-			if obj == LevelData.ObjectType.NONE:
-				continue
+		var z_world := (float(y) + 0.5) * block_size - half_d
+		var fy := _eval_catmull_x(level_data.bezier_floor_y, float(y) + 0.5, d)
+		var px := _eval_catmull_x(level_data.bezier_path_x, float(y) + 0.5, d) * block_size - half_w
+		var th := _eval_catmull_x(level_data.bezier_trail_half_w, float(y) + 0.5, d) * block_size
+		var li := _eval_catmull_x(level_data.bezier_left_wall_inner_x, float(y) + 0.5, d) * block_size - half_w
+		var ri := _eval_catmull_x(level_data.bezier_right_wall_inner_x, float(y) + 0.5, d) * block_size - half_w
 
-			var base_pos := level_data.get_world_pos(x, y)
-			var jitter := Vector3(rng.randf_range(-0.15, 0.15), 0.0, rng.randf_range(-0.15, 0.15))
-			var spawn_pos := base_pos + jitter
+		var tl := maxf(li, px - th)
+		var tr := minf(ri, px + th)
+		var span := maxf(0.0, tr - tl)
+		var blade_count := clampi(int(span * 2.2), 6, 40)
+		for i in range(blade_count):
+			var wx := rng.randf_range(tl + 0.15, tr - 0.15)
+			var wz := z_world + rng.randf_range(-0.45, 0.45)
+			var yaw := rng.randf_range(0.0, TAU)
+			var tilt := rng.randf_range(-0.18, 0.18)
+			var s_xz := rng.randf_range(0.75, 1.35)
+			var s_y := rng.randf_range(0.70, 1.45)
+			var basis := Basis.from_euler(Vector3(tilt, yaw, 0.0)).scaled(Vector3(s_xz, s_y, s_xz))
+			transforms.append(Transform3D(basis, Vector3(wx, fy + 0.015, wz)))
 
-			match obj:
-				LevelData.ObjectType.TREE:
-					_spawn_tree(spawn_pos, tree_trunk_mat, tree_leaves_mat, rng)
-				LevelData.ObjectType.ROCK_LARGE:
-					_spawn_rock(spawn_pos, rock_mat, 0.8, rng)
-				LevelData.ObjectType.ROCK_SMALL:
-					_spawn_rock(spawn_pos, rock_mat, 0.4, rng)
-				LevelData.ObjectType.DEBRIS_PILE:
-					_spawn_debris_pile(spawn_pos, rock_mat, rng)
-				LevelData.ObjectType.RUIN_PILLAR:
-					_spawn_pillar(spawn_pos, pillar_mat, rng)
-				LevelData.ObjectType.RUIN_ARTIFACT:
-					_spawn_artifact(spawn_pos, artifact_clay_mat, artifact_stone_mat, rng)
-				LevelData.ObjectType.BUSH:
-					_spawn_bush(spawn_pos, tree_leaves_mat, rng)
+			var hue_var := rng.randf_range(0.43, 0.50)
+			var sat_var := rng.randf_range(0.62, 0.84)
+			var val_var := rng.randf_range(0.46, 0.74)
+			colors.append(Color.from_hsv(hue_var, sat_var, val_var))
 
+	if transforms.is_empty():
+		return
 
-func _spawn_tree(pos: Vector3, trunk_mat: Material, leaves_mat: Material, _rng: RandomNumberGenerator) -> void:
-	var tree_root := Node3D.new()
-	tree_root.position = pos
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var blade_angles := [0.0, PI * 0.33, PI * 0.66]
+	for i in range(blade_angles.size()):
+		var ang: float = blade_angles[i]
+		var dir := Vector3(cos(ang), 0.0, sin(ang))
+		var perp := Vector3(-dir.z, 0.0, dir.x)
+		var bw := 0.09
+		var bh := 0.34 + float(i % 2) * 0.08
+		var lean := perp * 0.05
+		var v0 := -dir * bw
+		var v1 := dir * bw
+		var v2 := Vector3(lean.x, bh, lean.z)
+		var n := (v1 - v0).cross(v2 - v0).normalized()
+		st.set_normal(n)
+		st.set_color(Color(0.72, 0.82, 0.80))
+		st.add_vertex(v0)
+		st.set_color(Color(0.72, 0.82, 0.80))
+		st.add_vertex(v1)
+		st.set_color(Color(1.08, 1.15, 1.12))
+		st.add_vertex(v2)
 
-	var trunk := MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.2
-	cyl.bottom_radius = 0.3
-	cyl.height = 2.4
-	trunk.mesh = cyl
-	trunk.material_override = trunk_mat
-	trunk.position = Vector3(0, 1.2, 0)
-	tree_root.add_child(trunk)
+	var blade_mesh := st.commit()
+	var blade_mat := StandardMaterial3D.new()
+	blade_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	blade_mat.vertex_color_use_as_albedo = true
+	blade_mat.albedo_color = Color.WHITE
+	blade_mat.roughness = 0.78
+	blade_mesh.surface_set_material(0, blade_mat)
 
-	var leaves := MeshInstance3D.new()
-	var cone := CylinderMesh.new()
-	cone.top_radius = 0.0
-	cone.bottom_radius = 1.2
-	cone.height = 2.2
-	leaves.mesh = cone
-	leaves.material_override = leaves_mat
-	leaves.position = Vector3(0, 2.8, 0)
-	tree_root.add_child(leaves)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = blade_mesh
+	mm.instance_count = transforms.size()
+	for i in range(transforms.size()):
+		mm.set_instance_transform(i, transforms[i])
+		mm.set_instance_color(i, colors[i])
 
-	# Collision
-	var sb := StaticBody3D.new()
-	var col := CollisionShape3D.new()
-	var shape := CylinderShape3D.new()
-	shape.radius = 0.35
-	shape.height = 2.4
-	col.shape = shape
-	col.position = Vector3(0, 1.2, 0)
-	sb.add_child(col)
-	tree_root.add_child(sb)
-
-	_props_node.add_child(tree_root)
-
-
-func _spawn_rock(pos: Vector3, mat: Material, scale_factor: float, rng: RandomNumberGenerator) -> void:
-	var rock_root := StaticBody3D.new()
-	rock_root.position = pos
-	rock_root.rotation.y = rng.randf_range(0, TAU)
-
-	var sx := scale_factor * rng.randf_range(0.85, 1.35)
-	var sy := scale_factor * rng.randf_range(0.65, 1.25)
-	var sz := scale_factor * rng.randf_range(0.85, 1.35)
-	var main_size := Vector3(sx, sy, sz)
-	_add_part(
-		rock_root,
-		_box_mesh(main_size),
-		mat,
-		Vector3(0.0, sy * 0.45, 0.0),
-		Vector3(rng.randf_range(-0.14, 0.14), rng.randf_range(-0.25, 0.25), rng.randf_range(-0.14, 0.14))
-	)
-	var lobe_size := Vector3(sx * 0.65, sy * 0.72, sz * 0.65)
-	_add_part(
-		rock_root,
-		_box_mesh(lobe_size),
-		mat,
-		Vector3(sx * 0.28, lobe_size.y * 0.42, sz * 0.18),
-		Vector3(rng.randf_range(-0.2, 0.2), rng.randf_range(0.2, 0.9), rng.randf_range(-0.2, 0.2))
-	)
-
-	var shape := BoxShape3D.new()
-	shape.size = main_size
-	_add_collider(rock_root, shape, Vector3(0.0, sy * 0.45, 0.0))
-	_props_node.add_child(rock_root)
-
-
-func _spawn_debris_pile(pos: Vector3, mat: Material, rng: RandomNumberGenerator) -> void:
-	for i in range(3):
-		var piece := MeshInstance3D.new()
-		var box := BoxMesh.new()
-		box.size = Vector3(rng.randf_range(0.3, 0.6), rng.randf_range(0.1, 0.25), rng.randf_range(0.2, 0.5))
-		piece.mesh = box
-		piece.material_override = mat
-		var offset := Vector3(rng.randf_range(-0.3, 0.3), box.size.y * 0.5, rng.randf_range(-0.3, 0.3))
-		piece.position = pos + offset
-		piece.rotation.y = rng.randf_range(0, TAU)
-		_props_node.add_child(piece)
-
-
-## Ruin column: intact, broken, or fallen, chosen at random. Every variant is solid.
-func _spawn_pillar(pos: Vector3, mat: Material, rng: RandomNumberGenerator) -> void:
-	var root := StaticBody3D.new()
-	root.position = pos
-	root.rotation.y = rng.randf_range(0.0, TAU)
-	var variant := rng.randi() % 3
-	if variant == 0:
-		_build_intact_column(root, mat, rng.randf_range(2.6, 4.2))
-	elif variant == 1:
-		_build_broken_column(root, mat, rng.randf_range(1.0, 2.0))
-	else:
-		_build_fallen_column(root, mat)
-	_props_node.add_child(root)
-
-
-func _build_intact_column(root: StaticBody3D, mat: Material, shaft_h: float) -> void:
-	var base_h := 0.3
-	var capital_h := 0.22
-	var total := base_h + shaft_h + capital_h
-	_add_part(root, _box_mesh(Vector3(0.95, base_h, 0.95)), mat, Vector3(0, base_h * 0.5, 0))
-	_add_part(root, _cylinder_mesh(0.28, 0.32, shaft_h), mat, Vector3(0, base_h + shaft_h * 0.5, 0))
-	_add_part(root, _box_mesh(Vector3(0.8, capital_h, 0.8)), mat, Vector3(0, total - capital_h * 0.5, 0))
-	_add_collider(root, _cylinder_shape(0.34, total), Vector3(0, total * 0.5, 0))
-
-
-## Broken column: short shaft with a jagged top chunk and a fallen block at its foot.
-func _build_broken_column(root: StaticBody3D, mat: Material, shaft_h: float) -> void:
-	var base_h := 0.3
-	var top_y := base_h + shaft_h
-	_add_part(root, _box_mesh(Vector3(0.95, base_h, 0.95)), mat, Vector3(0, base_h * 0.5, 0))
-	_add_part(root, _cylinder_mesh(0.28, 0.32, shaft_h), mat, Vector3(0, base_h + shaft_h * 0.5, 0))
-	_add_part(root, _box_mesh(Vector3(0.5, 0.35, 0.45)), mat, Vector3(0.12, top_y + 0.05, 0), Vector3(0, 0, 0.35))
-	_add_part(root, _box_mesh(Vector3(0.6, 0.25, 0.55)), mat, Vector3(-0.75, 0.13, 0.35), Vector3(0, 0.5, 0))
-	_add_collider(root, _cylinder_shape(0.32, top_y), Vector3(0, top_y * 0.5, 0))
-
-
-## Fallen column: shaft lying on the ground with a broken capital beside it.
-func _build_fallen_column(root: StaticBody3D, mat: Material) -> void:
-	var length := 3.0
-	var radius := 0.3
-	var lay := Vector3(0, 0, PI * 0.5)
-	_add_part(root, _cylinder_mesh(radius, radius, length), mat, Vector3(0, radius, 0), lay)
-	_add_part(root, _box_mesh(Vector3(0.7, 0.3, 0.7)), mat, Vector3(1.9, 0.15, 0.2))
-	_add_collider(root, _cylinder_shape(radius, length), Vector3(0, radius, 0), lay)
-
-
-## Small ruin artifacts: urn, tablet, statue head, or cracked bowl. Decor only, with no collision, so they never block routes.
-func _spawn_artifact(pos: Vector3, clay_mat: Material, stone_mat: Material, rng: RandomNumberGenerator) -> void:
-	var root := Node3D.new()
-	root.position = pos
-	root.rotation.y = rng.randf_range(0.0, TAU)
-	var kind := rng.randi() % 4
-	if kind == 0:
-		# Clay urn: squat body with a narrow neck
-		_add_part(root, _sphere_mesh(0.22, 0.44), clay_mat, Vector3(0, 0.22, 0))
-		_add_part(root, _cylinder_mesh(0.1, 0.1, 0.14), clay_mat, Vector3(0, 0.51, 0))
-	elif kind == 1:
-		# Standing inscribed tablet, tilted
-		_add_part(root, _box_mesh(Vector3(0.5, 0.6, 0.12)), stone_mat, Vector3(0, 0.3, 0), Vector3(-0.12, 0, 0))
-	elif kind == 2:
-		# Broken statue head on a stub
-		_add_part(root, _box_mesh(Vector3(0.3, 0.2, 0.3)), stone_mat, Vector3(0, 0.1, 0))
-		_add_part(root, _sphere_mesh(0.2, 0.4), stone_mat, Vector3(0, 0.4, 0))
-	else:
-		# Cracked bowl with a shard beside it
-		_add_part(root, _cylinder_mesh(0.45, 0.28, 0.3), clay_mat, Vector3(0, 0.15, 0))
-		_add_part(root, _box_mesh(Vector3(0.18, 0.1, 0.14)), stone_mat, Vector3(0.55, 0.05, 0.2), Vector3(0, 0.6, 0))
-	_props_node.add_child(root)
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = "GrassBladesMultiMesh"
+	mmi.multimesh = mm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_terrain_node.add_child(mmi)
 
 
 func _add_part(root: Node3D, mesh: Mesh, mat: Material, offset: Vector3, euler: Vector3 = Vector3.ZERO) -> void:
@@ -529,29 +703,11 @@ func _cylinder_mesh(top_r: float, bottom_r: float, height: float) -> CylinderMes
 	return m
 
 
-func _sphere_mesh(radius: float, height: float) -> SphereMesh:
-	var m := SphereMesh.new()
-	m.radius = radius
-	m.height = height
-	return m
-
-
 func _cylinder_shape(radius: float, height: float) -> CylinderShape3D:
 	var s := CylinderShape3D.new()
 	s.radius = radius
 	s.height = height
 	return s
-
-
-func _spawn_bush(pos: Vector3, mat: Material, _rng: RandomNumberGenerator) -> void:
-	var bush := MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = 0.5
-	sphere.height = 0.7
-	bush.mesh = sphere
-	bush.material_override = mat
-	bush.position = pos + Vector3(0, 0.35, 0)
-	_props_node.add_child(bush)
 
 
 ## Populates weapon spawns, enemy guard regions, and level exits
@@ -570,8 +726,224 @@ func _populate_gameplay_elements() -> void:
 	for exit_item: LevelExitData in level_data.exits:
 		_create_exit_portal(exit_item)
 
-	# 4. Wandering lambs
-	_populate_lambs()
+	# 4. Opening meadow features (section 0): gated sheep pen on left & slingshot target practice on right
+	if level_data.has_opening_meadow or level_data.section_index == 0:
+		_build_opening_meadow_features()
+	else:
+		_populate_lambs()
+
+
+func _build_opening_meadow_features() -> void:
+	var half_d := level_data.depth * 0.5 * level_data.cell_size
+	var floor_y := _eval_catmull_x(level_data.bezier_floor_y, 6.0, level_data.depth)
+
+	# Left side of the 10m opening meadow: gated wooden sheep pen with several sheep inside
+	var pen_center := Vector3(-11.0, floor_y, 6.2 * level_data.cell_size - half_d)
+	_build_gated_sheep_pen(pen_center)
+
+	# Right side of the 10m opening meadow: slingshot target practice range
+	var range_center := Vector3(10.5, floor_y, 6.2 * level_data.cell_size - half_d)
+	_build_target_practice_range(range_center)
+
+
+func _build_gated_sheep_pen(center: Vector3) -> void:
+	var pen_root := Node3D.new()
+	pen_root.name = "GatedSheepPen"
+	pen_root.position = center
+	_gameplay_node.add_child(pen_root)
+
+	var wood_mat := StandardMaterial3D.new()
+	wood_mat.albedo_color = Color("#5d4028")
+	wood_mat.roughness = 0.88
+
+	var dark_wood_mat := StandardMaterial3D.new()
+	dark_wood_mat.albedo_color = Color("#3e2817")
+	dark_wood_mat.roughness = 0.92
+
+	var latch_mat := StandardMaterial3D.new()
+	latch_mat.albedo_color = Color("#3a3d40")
+	latch_mat.metallic = 0.6
+	latch_mat.roughness = 0.45
+
+	var half_x := 4.2
+	var half_z := 2.8
+	var fence_h := 1.15
+
+	var fence_body := StaticBody3D.new()
+	fence_body.name = "SheepPenFenceBody"
+	pen_root.add_child(fence_body)
+
+	# Corner and intermediate fence posts around the perimeter
+	var post_positions: Array[Vector3] = [
+		Vector3(-half_x, 0.0, -half_z),
+		Vector3(0.0, 0.0, -half_z),
+		Vector3(half_x, 0.0, -half_z),
+		Vector3(-half_x, 0.0, 0.0),
+		Vector3(-half_x, 0.0, half_z),
+		Vector3(0.0, 0.0, half_z),
+		Vector3(half_x, 0.0, half_z),
+		# Gate posts on the right side (+X facing the player / center meadow)
+		Vector3(half_x, 0.0, -1.05),
+		Vector3(half_x, 0.0, 1.05),
+	]
+	for p in post_positions:
+		_add_part(fence_body, _cylinder_mesh(0.11, 0.13, fence_h), dark_wood_mat, p + Vector3(0.0, fence_h * 0.5, 0.0))
+
+	# Overhead gate arch crossbar above the gate posts
+	_add_part(fence_body, _cylinder_mesh(0.11, 0.13, 1.65), dark_wood_mat, Vector3(half_x, 0.825, -1.05))
+	_add_part(fence_body, _cylinder_mesh(0.11, 0.13, 1.65), dark_wood_mat, Vector3(half_x, 0.825, 1.05))
+	_add_part(fence_body, _box_mesh(Vector3(0.18, 0.14, 2.35)), dark_wood_mat, Vector3(half_x, 1.62, 0.0))
+
+	# Horizontal rails (top and bottom) for North (-Z), South (+Z), West (-X), and East (+X) side segments
+	for rail_y in [0.38, 0.86]:
+		# Back (-Z) and Front (+Z) rails
+		_add_part(fence_body, _box_mesh(Vector3(half_x * 2.0, 0.09, 0.08)), wood_mat, Vector3(0.0, rail_y, -half_z))
+		_add_part(fence_body, _box_mesh(Vector3(half_x * 2.0, 0.09, 0.08)), wood_mat, Vector3(0.0, rail_y, half_z))
+		# Outer left (-X) rail
+		_add_part(fence_body, _box_mesh(Vector3(0.08, 0.09, half_z * 2.0)), wood_mat, Vector3(-half_x, rail_y, 0.0))
+		# East (+X) side rails flanking the central gate
+		var wing_len := half_z - 1.05
+		var wing_mid := 1.05 + wing_len * 0.5
+		_add_part(fence_body, _box_mesh(Vector3(0.08, 0.09, wing_len)), wood_mat, Vector3(half_x, rail_y, -wing_mid))
+		_add_part(fence_body, _box_mesh(Vector3(0.08, 0.09, wing_len)), wood_mat, Vector3(half_x, rail_y, wing_mid))
+
+	# Closed wooden gate with diagonal cross-brace and iron latch between the gate posts (z = -1.05..1.05)
+	var gate_node := Node3D.new()
+	gate_node.name = "SheepPenGate"
+	gate_node.position = Vector3(half_x, 0.0, 0.0)
+	fence_body.add_child(gate_node)
+	_add_part(gate_node, _box_mesh(Vector3(0.07, 0.09, 2.04)), wood_mat, Vector3(0.0, 0.34, 0.0))
+	_add_part(gate_node, _box_mesh(Vector3(0.07, 0.09, 2.04)), wood_mat, Vector3(0.0, 0.88, 0.0))
+	_add_part(gate_node, _box_mesh(Vector3(0.07, 0.68, 0.10)), wood_mat, Vector3(0.0, 0.61, -0.92))
+	_add_part(gate_node, _box_mesh(Vector3(0.07, 0.68, 0.10)), wood_mat, Vector3(0.0, 0.61, 0.92))
+	_add_part(gate_node, _box_mesh(Vector3(0.06, 0.08, 1.95)), wood_mat, Vector3(0.0, 0.61, 0.0), Vector3(0.28, 0.0, 0.0))
+	_add_part(gate_node, _box_mesh(Vector3(0.14, 0.10, 0.18)), latch_mat, Vector3(0.02, 0.88, 0.95))
+
+	# Physics colliders for all 4 walls of the gated pen so sheep stay safely penned
+	_add_collider(fence_body, _box_shape(Vector3(half_x * 2.0, fence_h, 0.25)), Vector3(0.0, fence_h * 0.5, -half_z))
+	_add_collider(fence_body, _box_shape(Vector3(half_x * 2.0, fence_h, 0.25)), Vector3(0.0, fence_h * 0.5, half_z))
+	_add_collider(fence_body, _box_shape(Vector3(0.25, fence_h, half_z * 2.0)), Vector3(-half_x, fence_h * 0.5, 0.0))
+	_add_collider(fence_body, _box_shape(Vector3(0.25, fence_h, half_z * 2.0)), Vector3(half_x, fence_h * 0.5, 0.0))
+
+	# Spawn 5 sheep inside the gated pen
+	var sheep_offsets: Array[Vector3] = [
+		Vector3(-1.8, 0.05, -1.2),
+		Vector3(1.4, 0.05, -1.1),
+		Vector3(-0.3, 0.05, 0.1),
+		Vector3(-1.9, 0.05, 1.3),
+		Vector3(1.5, 0.05, 1.2),
+	]
+	for i in range(sheep_offsets.size()):
+		var lamb := LAMB_SCENE.instantiate() as Lamb
+		lamb.name = "Lamb_%d" % i
+		lamb.penned = true
+		lamb.wander_radius = 2.1
+		lamb.position = center + sheep_offsets[i]
+		lamb.rotation.y = float(i) * 1.25
+		_gameplay_node.add_child(lamb)
+
+
+func _build_target_practice_range(center: Vector3) -> void:
+	var range_root := Node3D.new()
+	range_root.name = "TargetPracticeRange"
+	range_root.position = center
+	_gameplay_node.add_child(range_root)
+
+	var wood_mat := StandardMaterial3D.new()
+	wood_mat.albedo_color = Color("#63442b")
+	wood_mat.roughness = 0.86
+
+	var hay_mat := StandardMaterial3D.new()
+	hay_mat.albedo_color = Color("#c8a24a")
+	hay_mat.roughness = 0.92
+
+	var white_mat := StandardMaterial3D.new()
+	white_mat.albedo_color = Color("#f2ece1")
+	white_mat.roughness = 0.75
+
+	var red_mat := StandardMaterial3D.new()
+	red_mat.albedo_color = Color("#c9302c")
+	red_mat.roughness = 0.72
+
+	var blue_mat := StandardMaterial3D.new()
+	blue_mat.albedo_color = Color("#2e6da4")
+	blue_mat.roughness = 0.75
+
+	var gold_mat := StandardMaterial3D.new()
+	gold_mat.albedo_color = Color("#f0ad4e")
+	gold_mat.emission_enabled = true
+	gold_mat.emission = Color("#d9822b")
+	gold_mat.emission_energy_multiplier = 0.45
+
+	# Wooden shooting table / rack near the firing line (where the slingshot pickup sits at x=+8, y=5 -> local x=-2.5, z=-1.2)
+	var table_body := StaticBody3D.new()
+	table_body.name = "SlingshotRackTable"
+	table_body.position = Vector3(-2.5, 0.0, -1.2)
+	range_root.add_child(table_body)
+	_add_part(table_body, _box_mesh(Vector3(1.5, 0.08, 0.9)), wood_mat, Vector3(0.0, 0.65, 0.0))
+	for lx in [-0.62, 0.62]:
+		for lz in [-0.35, 0.35]:
+			_add_part(table_body, _cylinder_mesh(0.06, 0.06, 0.65), wood_mat, Vector3(lx, 0.325, lz))
+	_add_collider(table_body, _box_shape(Vector3(1.5, 0.7, 0.9)), Vector3(0.0, 0.35, 0.0))
+
+	# Elevate the slingshot pickup so it rests cleanly above the wooden practice table
+	var slingshot_pickup := _gameplay_node.get_node_or_null("Weapon_practice_slingshot_0") as Node3D
+	if slingshot_pickup:
+		slingshot_pickup.position = table_body.global_position if is_inside_tree() else (center + table_body.position)
+		slingshot_pickup.position.y += 0.85
+
+	# Low wooden firing line rail & hay bales
+	var rail_body := StaticBody3D.new()
+	rail_body.name = "FiringLineRail"
+	range_root.add_child(rail_body)
+	_add_part(rail_body, _box_mesh(Vector3(0.10, 0.10, 4.8)), wood_mat, Vector3(-1.4, 0.45, 0.2))
+	_add_part(rail_body, _cylinder_mesh(0.08, 0.09, 0.6), wood_mat, Vector3(-1.4, 0.3, -2.1))
+	_add_part(rail_body, _cylinder_mesh(0.08, 0.09, 0.6), wood_mat, Vector3(-1.4, 0.3, 2.5))
+	# Hay bales flanking the targets
+	_add_part(rail_body, _box_mesh(Vector3(0.9, 0.55, 1.3)), hay_mat, Vector3(1.6, 0.275, -2.2), Vector3(0.0, 0.15, 0.0))
+	_add_part(rail_body, _box_mesh(Vector3(0.9, 0.55, 1.3)), hay_mat, Vector3(2.2, 0.275, 2.4), Vector3(0.0, -0.2, 0.0))
+
+	# 3 Bullseye Practice Targets at staggered distances & heights on the right side
+	var target_specs := [
+		{"name": "PracticeTarget_0", "pos": Vector3(2.2, 0.0, -1.6), "height": 1.35, "yaw": -0.22},
+		{"name": "PracticeTarget_1", "pos": Vector3(3.6, 0.0, 0.2), "height": 1.55, "yaw": 0.0},
+		{"name": "PracticeTarget_2", "pos": Vector3(2.5, 0.0, 1.9), "height": 1.25, "yaw": 0.22},
+	]
+	for spec: Dictionary in target_specs:
+		var t_body := PRACTICE_TARGET_SCRIPT.new() as StaticBody3D
+		t_body.name = spec["name"]
+		t_body.position = spec["pos"]
+		t_body.rotation.y = float(spec["yaw"])
+		t_body.collision_layer = 5 # Layers 1 (world) + 3 (enemy) so StoneProjectile mask 5 collides & triggers enemy_struck
+		range_root.add_child(t_body)
+
+		var post_h: float = spec["height"]
+		# Wooden stand post & base
+		_add_part(t_body, _box_mesh(Vector3(0.7, 0.1, 0.7)), wood_mat, Vector3(0.0, 0.05, 0.0))
+		_add_part(t_body, _cylinder_mesh(0.08, 0.10, post_h), wood_mat, Vector3(0.0, post_h * 0.5, 0.0))
+
+		# Hinged bullseye disc pivot so hitting it with a stone knocks it back & springs it upright
+		var pivot := Node3D.new()
+		pivot.name = "BullseyePivot"
+		pivot.position = Vector3(0.0, post_h, 0.0)
+		t_body.add_child(pivot)
+
+		# Concentric bullseye rings facing -X (toward the firing line / center meadow)
+		var face_rot := Vector3(0.0, 0.0, PI * 0.5)
+		_add_part(pivot, _cylinder_mesh(0.58, 0.58, 0.10), hay_mat, Vector3(0.0, 0.0, 0.0), face_rot)
+		_add_part(pivot, _cylinder_mesh(0.50, 0.50, 0.12), white_mat, Vector3(-0.01, 0.0, 0.0), face_rot)
+		_add_part(pivot, _cylinder_mesh(0.36, 0.36, 0.14), blue_mat, Vector3(-0.02, 0.0, 0.0), face_rot)
+		_add_part(pivot, _cylinder_mesh(0.23, 0.23, 0.16), red_mat, Vector3(-0.03, 0.0, 0.0), face_rot)
+		_add_part(pivot, _cylinder_mesh(0.10, 0.10, 0.18), gold_mat, Vector3(-0.04, 0.0, 0.0), face_rot)
+
+		_add_collider(t_body, _cylinder_shape(0.62, 0.35), Vector3(0.0, post_h, 0.0), face_rot)
+		t_body.setup(pivot)
+
+
+func _box_shape(size: Vector3) -> BoxShape3D:
+	var s := BoxShape3D.new()
+	s.size = size
+	return s
 
 
 func _create_weapon_pickup(info: Dictionary) -> void:
@@ -671,56 +1043,18 @@ func _instantiate_guard_creature(info: Dictionary) -> CharacterBody3D:
 	return enemy_body
 
 
-## Scatters lambs on open grass near the start, away from guard zones and each other.
+## Scatters lambs along the green trail in non-opening sections
 func _populate_lambs() -> void:
-	var start: Vector2i = level_data.entrances.get("start", Vector2i.ZERO)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = world_seed + 417
-
-	var candidates: Array[Vector2i] = []
-	for y in level_data.depth:
-		for x in level_data.width:
-			if level_data.get_cell_terrain(x, y) != LevelData.TerrainType.GRASS:
-				continue
-			if level_data.get_cell_object(x, y) != LevelData.ObjectType.NONE:
-				continue
-			var from_start := Vector2(x - start.x, y - start.y).length()
-			if from_start < LAMB_MIN_START_DIST or from_start > LAMB_MAX_START_DIST:
-				continue
-			if _is_near_guard(Vector2i(x, y)):
-				continue
-			candidates.append(Vector2i(x, y))
-
-	var placed: Array[Vector2i] = []
-	var attempts := 0
-	while placed.size() < LAMB_COUNT and not candidates.is_empty() and attempts < 500:
-		attempts += 1
-		var pick: Vector2i = candidates[rng.randi() % candidates.size()]
-		if _is_too_close(pick, placed):
-			continue
-		placed.append(pick)
-
-	for i in placed.size():
-		var cell: Vector2i = placed[i]
+	for i in range(LAMB_COUNT):
+		var y_row := clampi(7 + i * 3 + rng.randi_range(-1, 1), 6, level_data.depth - 14)
+		var px := _eval_catmull_x(level_data.bezier_path_x, float(y_row), level_data.depth)
+		var cell_x := clampi(int(round(px + rng.randf_range(-1.5, 1.5))), 4, level_data.width - 5)
 		var lamb := LAMB_SCENE.instantiate() as Node3D
 		lamb.name = "Lamb_%d" % i
-		lamb.position = level_data.get_world_pos(cell.x, cell.y)
+		lamb.position = level_data.get_world_pos(cell_x, y_row)
 		_gameplay_node.add_child(lamb)
-
-
-func _is_near_guard(cell: Vector2i) -> bool:
-	for guard_data: Dictionary in level_data.enemy_guard_zones:
-		var guard_pos: Vector2i = guard_data.get("guard_pos", Vector2i.ZERO)
-		if Vector2(cell).distance_to(Vector2(guard_pos)) < LAMB_GUARD_CLEARANCE:
-			return true
-	return false
-
-
-func _is_too_close(cell: Vector2i, others: Array[Vector2i]) -> bool:
-	for other in others:
-		if Vector2(cell).distance_to(Vector2(other)) < LAMB_MIN_SPACING:
-			return true
-	return false
 
 
 func _create_exit_portal(exit_item: LevelExitData) -> void:
@@ -735,22 +1069,25 @@ func _create_exit_portal(exit_item: LevelExitData) -> void:
 	var col := CollisionShape3D.new()
 	col.name = "ExitTriggerShape"
 	if is_cave:
+		var side := exit_item.cave_side if exit_item.cave_side != 0 else (-1 if exit_item.grid_pos.x < level_data.width / 2 else 1)
 		var box_shape := BoxShape3D.new()
-		box_shape.size = Vector3(1.6, 3.2, 2.8)
+		box_shape.size = Vector3(2.4, CAVE_HOLE_HEIGHT, CAVE_HOLE_HALF_Z * 2.0)
 		col.shape = box_shape
-		col.position = Vector3(0.0, 1.6, 0.0)
+		col.position = Vector3(float(side) * 0.9, CAVE_HOLE_HEIGHT * 0.5, 0.0)
+
+		var cave_light := OmniLight3D.new()
+		cave_light.light_color = Color(0.45, 0.85, 0.5)
+		cave_light.light_energy = 1.4
+		cave_light.omni_range = 7.0
+		cave_light.position = Vector3(-float(side) * 0.4, 2.0, 0.0)
+		portal_area.add_child(cave_light)
 	else:
 		var shape := CylinderShape3D.new()
 		shape.radius = 2.0
 		shape.height = 4.0
 		col.shape = shape
 		col.position = Vector3(0.0, 2.0, 0.0)
-	portal_area.add_child(col)
 
-	if is_cave:
-		_build_cave_entrance_visual(portal_area, exit_item)
-	else:
-		# Visual beacon beam
 		var beam := MeshInstance3D.new()
 		var cyl := CylinderMesh.new()
 		cyl.top_radius = 0.3
@@ -766,7 +1103,6 @@ func _create_exit_portal(exit_item: LevelExitData) -> void:
 		beam.position = Vector3(0, 8.0, 0)
 		portal_area.add_child(beam)
 
-		# Light
 		var light := OmniLight3D.new()
 		light.light_color = exit_item.color
 		light.light_energy = 2.5
@@ -774,76 +1110,13 @@ func _create_exit_portal(exit_item: LevelExitData) -> void:
 		light.position = Vector3(0, 2.5, 0)
 		portal_area.add_child(light)
 
-	# Connect area body entered
+	portal_area.add_child(col)
 	portal_area.body_entered.connect(func(body: Node3D):
 		if body is CharacterBody3D and body.is_in_group("player"):
 			level_exit_triggered.emit(exit_item.id, exit_item.target_level_path, exit_item.target_entrance_id)
 	)
 
 	_gameplay_node.add_child(portal_area)
-
-
-func _build_cave_entrance_visual(portal_area: Area3D, exit_item: LevelExitData) -> void:
-	var side := exit_item.cave_side
-	if side == 0:
-		side = -1 if exit_item.grid_pos.x < level_data.width / 2 else 1
-
-	var cave_root := Node3D.new()
-	cave_root.name = "CaveEntrance"
-	# Face the opening toward the valley center: if on right wall (+1), cave tunnel extends +X; if on left wall (-1), tunnel extends -X.
-	cave_root.rotation.y = 0.0 if side > 0 else PI
-	portal_area.add_child(cave_root)
-
-	var rock_mat := StandardMaterial3D.new()
-	rock_mat.albedo_color = Color("#4d4843")
-	rock_mat.roughness = 0.95
-
-	var dark_mat := StandardMaterial3D.new()
-	dark_mat.albedo_color = Color(0.02, 0.02, 0.03)
-	dark_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
-	var moss_mat := StandardMaterial3D.new()
-	moss_mat.albedo_color = Color("#5f7a38")
-	moss_mat.roughness = 0.9
-
-	var grass_mat := StandardMaterial3D.new()
-	grass_mat.albedo_color = Color("#6f7a3b")
-	grass_mat.roughness = 0.85
-
-	# Green grass floor extending 3 meters into the cave tunnel from the cave entrance (x = 0 to x = 3.0)
-	var grass_floor := _add_part_returned(cave_root, _box_mesh(Vector3(3.0, 0.06, 2.8)), grass_mat, Vector3(1.5, 0.01, 0.0))
-	grass_floor.name = "CaveTunnelGrassFloor"
-
-	# Left & right rock walls forming the 3m tunnel into the cave walls
-	_add_part(cave_root, _box_mesh(Vector3(3.6, 4.4, 1.3)), rock_mat, Vector3(1.5, 2.2, -2.05), Vector3(0.04, 0.0, -0.05))
-	_add_part(cave_root, _box_mesh(Vector3(3.6, 4.4, 1.3)), rock_mat, Vector3(1.5, 2.2, 2.05), Vector3(-0.04, 0.0, -0.05))
-	# Rocky crags framing the front mouth of the tunnel
-	_add_part(cave_root, _box_mesh(Vector3(1.4, 3.8, 1.4)), rock_mat, Vector3(0.1, 1.9, -2.15), Vector3(0.08, 0.18, -0.06))
-	_add_part(cave_root, _box_mesh(Vector3(1.4, 3.8, 1.4)), rock_mat, Vector3(0.1, 1.9, 2.15), Vector3(-0.08, -0.18, -0.06))
-	# Arch roof / cliff overhang spanning the full 3m tunnel depth
-	var tunnel_roof := _add_part_returned(cave_root, _box_mesh(Vector3(3.8, 1.8, 5.4)), rock_mat, Vector3(1.6, 4.5, 0.0), Vector3(0.0, 0.0, 0.05))
-	tunnel_roof.name = "CaveTunnelRoof"
-	_add_part(cave_root, _box_mesh(Vector3(3.0, 1.2, 4.2)), moss_mat, Vector3(1.4, 5.5, 0.0))
-	# Dark cave interior void at the back of the 3m grass tunnel
-	var back_void := _add_part_returned(cave_root, _box_mesh(Vector3(0.8, 3.8, 3.0)), dark_mat, Vector3(3.3, 1.9, 0.0))
-	back_void.name = "CaveTunnelBackVoid"
-
-	var light := OmniLight3D.new()
-	light.light_color = Color(0.45, 0.85, 0.5)
-	light.light_energy = 1.6
-	light.omni_range = 8.0
-	light.position = Vector3(0.2, 2.2, 0.0)
-	cave_root.add_child(light)
-
-
-func _add_part_returned(root: Node3D, mesh: Mesh, mat: Material, offset: Vector3, euler: Vector3 = Vector3.ZERO) -> MeshInstance3D:
-	var part := MeshInstance3D.new()
-	part.mesh = mesh
-	part.material_override = mat
-	part.position = offset
-	part.rotation = euler
-	root.add_child(part)
-	return part
 
 
 ## Query helper for player spawn location

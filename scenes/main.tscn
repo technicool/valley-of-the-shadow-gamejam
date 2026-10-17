@@ -1,9 +1,8 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/level.gd" id="1_level"]
 [ext_resource type="Script" path="res://scripts/level_map_populator.gd" id="2_populator"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="3_player"]
-[ext_resource type="Resource" path="res://levels/level_01.tres" id="4_level"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_valley"]
 sky_top_color = Color(0.2, 0.18, 0.34, 1)
@@ -45,6 +44,6 @@ shadow_enabled = true
 
 [node name="LevelMapPopulator" type="Node3D" parent="."]
 script = ExtResource("2_populator")
-level_data = ExtResource("4_level")
+auto_rebuild_on_ready = false
 
 [node name="Player" parent="." instance=ExtResource("3_player")]
