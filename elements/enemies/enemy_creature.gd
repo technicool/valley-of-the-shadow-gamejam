@@ -3,6 +3,8 @@ extends CharacterBody3D
 ## Creature element that wanders near its spawn point and chases the player inside detect_range.
 ## Collider and visuals live in each creature scene; tuning values are exported per creature.
 
+signal died(enemy: EnemyCreature)
+
 @export var creature_name: String = "Creature"
 @export var max_health: int = 20
 @export var attack_damage: int = 5
@@ -14,6 +16,7 @@ extends CharacterBody3D
 const WAIT_TIME := 1.5
 const ARRIVE_DISTANCE := 0.3
 
+var health: int = 20
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _home := Vector3.ZERO
 var _target := Vector3.ZERO
@@ -23,9 +26,22 @@ var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	add_to_group("enemy")
+	health = max_health
 	_home = global_position
 	_rng.randomize()
 	_pick_wander_target()
+
+
+func take_damage(amount: int) -> void:
+	health = maxi(0, health - amount)
+	if health <= 0:
+		die()
+
+
+func die() -> void:
+	remove_from_group("enemy")
+	died.emit(self)
+	queue_free()
 
 
 func _physics_process(delta: float) -> void:

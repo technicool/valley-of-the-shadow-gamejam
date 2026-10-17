@@ -38,6 +38,8 @@ const LAMB_GUARD_CLEARANCE := 8.0
 
 @export var generation_mode: LevelMapGenerator.GenerationMode = LevelMapGenerator.GenerationMode.LINEAR_PATH
 @export var world_seed: int = 1337
+@export var section_index: int = 0
+@export var section_length: int = 50
 @export var auto_rebuild_on_ready: bool = true
 
 @export_group("Editor Actions")
@@ -111,11 +113,11 @@ func generate_level_data() -> void:
 	_ensure_subnodes()
 	var gen := LevelMapGenerator.new()
 	var w := 80
-	var d := 80
+	var d := section_length
 	if level_data:
 		w = level_data.width
 		d = level_data.depth
-	level_data = gen.generate(generation_mode, world_seed, w, d)
+	level_data = gen.generate(generation_mode, world_seed, w, d, section_index)
 	sync_to_tilemap()
 	rebuild_all()
 
@@ -240,6 +242,8 @@ func _build_3d_terrain() -> void:
 				var neighbor_elev := 0
 				if nx >= 0 and nx < w and ny >= 0 and ny < d:
 					neighbor_elev = level_data.get_cell_elevation(nx, ny)
+				elif nx >= 0 and nx < w and (ny < 0 or ny >= d):
+					neighbor_elev = elev
 				var neighbor_top := neighbor_elev * step_h
 				if neighbor_top < top_y:
 					var normal: Vector3 = side_normals[s]
@@ -632,6 +636,16 @@ func _create_enemy_guard_zone(info: Dictionary) -> void:
 			barrier.add_child(b_mesh)
 			zone_node.add_child(barrier)
 
+	enemy_body.tree_exiting.connect(func():
+		for child in zone_node.get_children():
+			if child != enemy_body and is_instance_valid(child):
+				if child is CollisionObject3D:
+					for sub in child.get_children():
+						if sub is CollisionShape3D:
+							sub.set_deferred("disabled", true)
+				child.queue_free()
+	)
+
 	_gameplay_node.add_child(zone_node)
 
 
@@ -712,46 +726,91 @@ func _create_exit_portal(exit_item: LevelExitData) -> void:
 	shape.height = 4.0
 	col.shape = shape
 	col.position = Vector3(0, 2.0, 0)
-	portal_area.add_child(col)
+	var is_cave := exit_item.is_cave_entrance or SidequestManager.is_sidequest_target(exit_item.target_level_path)
+	if is_cave:
+		_build_cave_entrance_visual(portal_area, exit_item)
+	else:
+		# Visual beacon beam
+		var beam := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.3
+		cyl.bottom_radius = 0.5
+		cyl.height = 16.0
+		beam.mesh = cyl
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = exit_item.color
+		mat.emission_enabled = true
+		mat.emission = exit_item.color
+		mat.emission_energy_multiplier = 3.0
+		beam.material_override = mat
+		beam.position = Vector3(0, 8.0, 0)
+		portal_area.add_child(beam)
 
-	# Visual beacon beam
-	var beam := MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.3
-	cyl.bottom_radius = 0.5
-	cyl.height = 16.0
-	beam.mesh = cyl
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = exit_item.color
-	mat.emission_enabled = true
-	mat.emission = exit_item.color
-	mat.emission_energy_multiplier = 3.0
-	beam.material_override = mat
-	beam.position = Vector3(0, 8.0, 0)
-	portal_area.add_child(beam)
-
-	# Light
-	var light := OmniLight3D.new()
-	light.light_color = exit_item.color
-	light.light_energy = 2.5
-	light.omni_range = 14.0
-	light.position = Vector3(0, 2.5, 0)
-	portal_area.add_child(light)
+		# Light
+		var light := OmniLight3D.new()
+		light.light_color = exit_item.color
+		light.light_energy = 2.5
+		light.omni_range = 14.0
+		light.position = Vector3(0, 2.5, 0)
+		portal_area.add_child(light)
 
 	# Connect area body entered
 	portal_area.body_entered.connect(func(body: Node3D):
-		if body is CharacterBody3D:
+		if body is CharacterBody3D and body.is_in_group("player"):
 			level_exit_triggered.emit(exit_item.id, exit_item.target_level_path, exit_item.target_entrance_id)
 	)
 
 	_gameplay_node.add_child(portal_area)
 
 
+func _build_cave_entrance_visual(portal_area: Area3D, exit_item: LevelExitData) -> void:
+	var side := exit_item.cave_side
+	if side == 0:
+		side = -1 if exit_item.grid_pos.x < level_data.width / 2 else 1
+
+	var cave_root := Node3D.new()
+	cave_root.name = "CaveEntrance"
+	# Face the opening toward the valley center: if on right wall (+1), cave goes +X; if on left wall (-1), cave goes -X.
+	cave_root.rotation.y = 0.0 if side > 0 else PI
+	portal_area.add_child(cave_root)
+
+	var rock_mat := StandardMaterial3D.new()
+	rock_mat.albedo_color = Color("#4d4843")
+	rock_mat.roughness = 0.95
+
+	var dark_mat := StandardMaterial3D.new()
+	dark_mat.albedo_color = Color(0.02, 0.02, 0.03)
+	dark_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+
+	var moss_mat := StandardMaterial3D.new()
+	moss_mat.albedo_color = Color("#5f7a38")
+	moss_mat.roughness = 0.9
+
+	# Left & right rock pillars framing the cave mouth along Z
+	_add_part(cave_root, _box_mesh(Vector3(2.6, 4.8, 1.3)), rock_mat, Vector3(0.4, 2.4, -2.1), Vector3(0.05, 0.0, -0.08))
+	_add_part(cave_root, _box_mesh(Vector3(2.6, 4.8, 1.3)), rock_mat, Vector3(0.4, 2.4, 2.1), Vector3(-0.05, 0.0, -0.08))
+	# Arch lintel / cliff overhang above the cave opening
+	_add_part(cave_root, _box_mesh(Vector3(3.0, 2.2, 5.6)), rock_mat, Vector3(0.5, 4.9, 0.0), Vector3(0.0, 0.0, 0.1))
+	_add_part(cave_root, _box_mesh(Vector3(2.2, 1.6, 4.4)), moss_mat, Vector3(0.2, 5.9, 0.0))
+	# Dark cave interior void inside the wall
+	_add_part(cave_root, _box_mesh(Vector3(1.4, 3.8, 3.0)), dark_mat, Vector3(1.1, 1.9, 0.0))
+
+	var light := OmniLight3D.new()
+	light.light_color = Color(0.45, 0.85, 0.5)
+	light.light_energy = 1.6
+	light.omni_range = 8.0
+	light.position = Vector3(-0.5, 2.2, 0.0)
+	cave_root.add_child(light)
+
+
 ## Query helper for player spawn location
 func get_entrance_world_pos(entrance_id: String = "start") -> Vector3:
-	if not level_data or not level_data.entrances.has(entrance_id):
-		return Vector3(0, 3.0, 0)
-	var grid: Vector2i = level_data.entrances[entrance_id]
+	if not level_data:
+		return global_position + Vector3(0, 3.0, 0)
+	var key := entrance_id if level_data.entrances.has(entrance_id) else "start"
+	if not level_data.entrances.has(key):
+		return global_position + Vector3(0, 3.0, 0)
+	var grid: Vector2i = level_data.entrances[key]
 	var pos := level_data.get_world_pos(grid.x, grid.y)
 	pos.y += 1.5
-	return pos
+	return global_transform * pos

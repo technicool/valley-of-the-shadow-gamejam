@@ -115,3 +115,5 @@ func _fire_stone() -> void:
 
 func _on_enemy_struck(enemy: Node3D) -> void:
 	enemy_struck.emit(enemy)
+	if enemy.has_method("die"):
+		enemy.call("die")

@@ -15,16 +15,27 @@ enum GenerationMode {
 var mode: GenerationMode = GenerationMode.LINEAR_PATH
 var seed_val: int = 1337
 var map_width: int = 80
-var map_depth: int = 80
-var step_height: float = 0.5
+var map_depth: int = 50
+var step_height: float = LevelData.DEFAULT_STEP_HEIGHT
 var cell_size: float = 1.0
+var section_index: int = 0
 
 ## Guard gate: ring of ruin pillars around the guarded exit, with a gap on the start side.
 const GATE_RING_RADIUS := 4
 const GATE_HALF_WIDTH := 1
 const GUARD_SETBACK := 2
-## Max elevation step difference between neighbors on linear paths. Values above 1 build cliffs the player cannot climb.
-const LINEAR_CLIFF_MAX_STEPS := 3
+## Max elevation step difference between neighbors on linear paths.
+const LINEAR_CLIFF_MAX_STEPS := 14
+## Profile tuning for the procedural valley.
+const GREEN_CENTER_HALF_WIDTH := 2.5
+const MUD_FLAT_OUTER_RADIUS := 7.5
+const DEBRIS_OUTER_RADIUS := 9.5
+const WALL_CREST_RADIUS := 13.5
+const WALL_MIN_HEIGHT_INCREASE := 6.0
+const WALL_MAX_HEIGHT_INCREASE := 20.0
+const PASSAGE_HALF_WIDTH := 1.5
+const PASSAGE_BLEND_ROWS := 10.0
+const SEAM_NOISE_BLEND_ROWS := 8.0
 ## Ruin-site noise above this value marks a cluster of ruins on the valley shoulders.
 const RUIN_SITE_THRESHOLD := 0.62
 const SOLID_OBJECTS := [
@@ -39,6 +50,7 @@ var _noise_height: FastNoiseLite
 var _noise_detail: FastNoiseLite
 var _noise_objects: FastNoiseLite
 var _noise_ruins: FastNoiseLite
+var _noise_seam: FastNoiseLite
 var _rng: RandomNumberGenerator
 
 
@@ -47,14 +59,16 @@ func _init() -> void:
 	_noise_detail = FastNoiseLite.new()
 	_noise_objects = FastNoiseLite.new()
 	_noise_ruins = FastNoiseLite.new()
+	_noise_seam = FastNoiseLite.new()
 	_rng = RandomNumberGenerator.new()
 
 
-func generate(p_mode: GenerationMode, p_seed: int = 1337, p_width: int = 80, p_depth: int = 80) -> LevelData:
+func generate(p_mode: GenerationMode, p_seed: int = 1337, p_width: int = 80, p_depth: int = 50, p_section_index: int = 0) -> LevelData:
 	mode = p_mode
 	seed_val = p_seed
 	map_width = p_width
 	map_depth = p_depth
+	section_index = p_section_index
 
 	_rng.seed = seed_val
 	_setup_noise()
@@ -75,6 +89,8 @@ func generate(p_mode: GenerationMode, p_seed: int = 1337, p_width: int = 80, p_d
 			_generate_maze(data)
 
 	_limit_slopes(data, LINEAR_CLIFF_MAX_STEPS if mode == GenerationMode.LINEAR_PATH else 1)
+	if mode == GenerationMode.LINEAR_PATH:
+		_enforce_linear_seam_match(data)
 	_add_guard_gates(data)
 	return data
 
@@ -98,24 +114,65 @@ func _setup_noise() -> void:
 	_noise_ruins.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	_noise_ruins.frequency = 0.045
 
+	_noise_seam.seed = 9001
+	_noise_seam.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	_noise_seam.frequency = 0.035
+	_noise_seam.fractal_octaves = 3
+
 
 func _path_center_x(y: float) -> float:
-	var half_d := map_depth * 0.5
-	var z := y - half_d
-	return (map_width * 0.5) + 7.0 * sin(z * 0.07) + 3.0 * sin(z * 0.17 + 1.3)
+	var t := clampf(y / maxf(1.0, float(map_depth - 1)), 0.0, 1.0)
+	var envelope := sin(PI * t)
+	var phase1 := float(seed_val % 997) * 0.13
+	var phase2 := float(seed_val % 577) * 0.29
+	var sway := 6.0 * sin(t * TAU + phase1) + 2.5 * sin(t * TAU * 2.0 + phase2)
+	return (map_width * 0.5) + envelope * sway
+
+
+func _seam_weight(y: float) -> float:
+	var dist_to_end := minf(y, float(map_depth - 1) - y)
+	return smoothstep(0.0, SEAM_NOISE_BLEND_ROWS, dist_to_end)
+
+
+func _passage_narrow_factor(y: float) -> float:
+	var dist_to_end := minf(y, float(map_depth - 1) - y)
+	return 1.0 - smoothstep(1.5, PASSAGE_BLEND_ROWS, dist_to_end)
+
+
+func _sample_wall_noise(x: float, y: float) -> float:
+	var w := _seam_weight(y)
+	var local_n := (_noise_height.get_noise_2d(x, y) + 1.0) * 0.5
+	var seam_n := (_noise_seam.get_noise_2d(x, 0.0) + 1.0) * 0.5
+	return lerpf(seam_n, local_n, w)
+
+
+func _sample_wobble(x: float, y: float) -> float:
+	var w := _seam_weight(y)
+	return _noise_detail.get_noise_2d(x, y) * 1.5 * w
 
 
 func _generate_linear_path(data: LevelData) -> void:
-	var entrance_y := 6
-	var exit_y := map_depth - 7
-	var start_pos := Vector2i(int(_path_center_x(entrance_y)), entrance_y)
-	var main_exit_pos := Vector2i(int(_path_center_x(exit_y)), exit_y)
+	var entrance_y := 4
+	var exit_y := maxi(entrance_y + 10, map_depth - 3)
+	var center_start_x := int(round(_path_center_x(float(entrance_y))))
+	var center_exit_x := int(round(_path_center_x(float(exit_y))))
+	var start_pos := Vector2i(center_start_x, entrance_y)
+	var main_exit_pos := Vector2i(center_exit_x, exit_y)
 
 	data.entrances["start"] = start_pos
-	var side_exit_pos := Vector2i(clampi(int(_path_center_x(40)) + 26, 4, map_width - 5), 40)
-	# Return point used when the player comes back from a sidequest map. Placed four cells
-	# short of the side exit so the return does not land on the exit portal.
-	data.entrances["from_sidequest"] = Vector2i(side_exit_pos.x - 4, 41)
+
+	# Cave entrance on the steep valley wall on the left (-1) or the right (+1).
+	var cave_y := clampi(int(round(map_depth * 0.5)), 12, maxi(12, map_depth - 13))
+	var cave_side := -1 if (_rng.randi() % 2 == 0) else 1
+	var cave_center_x := _path_center_x(float(cave_y))
+	var wall_offset := int(round(MUD_FLAT_OUTER_RADIUS + 4.0))
+	var side_exit_x := clampi(int(round(cave_center_x)) + cave_side * wall_offset, 6, map_width - 7)
+	var side_exit_pos := Vector2i(side_exit_x, cave_y)
+	# Return point placed 4 cells toward the valley center along the green trail so returning does not re-trigger the cave.
+	var return_x := clampi(side_exit_pos.x - cave_side * 4, 4, map_width - 5)
+	var return_id := "from_sidequest_%d" % section_index
+	data.entrances["from_sidequest"] = Vector2i(return_x, cave_y)
+	data.entrances[return_id] = Vector2i(return_x, cave_y)
 
 	var main_exit := LevelExitData.new()
 	main_exit.id = "exit_main"
@@ -124,84 +181,150 @@ func _generate_linear_path(data: LevelData) -> void:
 	main_exit.color = Color(0.3, 0.8, 1.0)
 	data.exits.append(main_exit)
 
-	# Optional side quest branch exit halfway through
+	# Sidequest cave entrance on the steep valley wall
 	var side_exit := LevelExitData.new()
 	side_exit.id = "exit_sidequest"
 	side_exit.grid_pos = side_exit_pos
 	side_exit.target_level_path = "sidequest://random"
-	side_exit.target_entrance_id = "from_sidequest"
-	side_exit.label = "Side Quest: The Sunken Ruins"
-	side_exit.color = Color(1.0, 0.6, 0.2)
+	side_exit.target_entrance_id = return_id
+	side_exit.label = "Side Quest Cave"
+	side_exit.color = Color(0.35, 0.85, 0.45)
+	side_exit.is_cave_entrance = true
+	side_exit.cave_side = cave_side
 	data.exits.append(side_exit)
 
+	var base_floor_elev := 1.0
+
 	for y in range(map_depth):
-		var center_x := _path_center_x(y)
+		var center_x := _path_center_x(float(y))
+		var narrow := _passage_narrow_factor(float(y))
+		var flat_outer := lerpf(MUD_FLAT_OUTER_RADIUS, PASSAGE_HALF_WIDTH, narrow)
+		var debris_outer := lerpf(DEBRIS_OUTER_RADIUS, PASSAGE_HALF_WIDTH + 1.0, narrow)
+		var wall_crest := lerpf(WALL_CREST_RADIUS, PASSAGE_HALF_WIDTH + 3.0, narrow)
+		var green_half := minf(GREEN_CENTER_HALF_WIDTH, flat_outer)
+
 		for x in range(map_width):
 			var dist_to_path := absf(float(x) - center_x)
-			var wobble := _noise_detail.get_noise_2d(float(x), float(y)) * 1.5
+			var wobble := _sample_wobble(float(x), float(y))
 
-			# Connect side branch at y ~ 40
-			if y >= 37 and y <= 43 and x >= center_x and x <= side_exit_pos.x:
-				dist_to_path = minf(dist_to_path, absf(float(y) - 40.0))
+			# Check if cell is part of the green trail leading into the cave opening on the steep wall
+			var on_cave_trail := false
+			var cave_trail_dist := 999.0
+			var in_cave_Span := (cave_side > 0 and float(x) >= center_x and x <= side_exit_pos.x + 1) or (cave_side < 0 and float(x) <= center_x and x >= side_exit_pos.x - 1)
+			if in_cave_Span and absi(y - cave_y) <= 2:
+				cave_trail_dist = absf(float(y) - float(cave_y))
+				if cave_trail_dist <= 1.5 and ((cave_side > 0 and x <= side_exit_pos.x) or (cave_side < 0 and x >= side_exit_pos.x)):
+					on_cave_trail = true
 
-			var n := (_noise_height.get_noise_2d(float(x), float(y)) + 1.0) * 0.5
-			# Ridges rise steeply (up to about 16 m) within a few cells of the path.
-			var hills := 4.0 + 12.0 * n * n
-			var path_elev := 1.0 + 0.8 * sin(float(y) * 0.08)
-			var blend := smoothstep(2.5, 5.0, dist_to_path)
-			var elevation := lerpf(path_elev, hills, blend)
+			var n := _sample_wall_noise(float(x), float(y))
+			# Steep valley wall: 6 to 20 m height increase above the valley floor, with cliff edges.
+			var wall_increase := lerpf(WALL_MIN_HEIGHT_INCREASE, WALL_MAX_HEIGHT_INCREASE, clampf(n, 0.0, 1.0))
+			if narrow > 0.25 and dist_to_path > PASSAGE_HALF_WIDTH:
+				wall_increase = maxf(wall_increase, 10.0)
 
-			# Perimeter rim walls
-			var edge_dist := minf(minf(x, map_width - 1 - x), minf(y, map_depth - 1 - y))
-			if edge_dist < 6.0 and not _is_near_exit_or_entrance(Vector2i(x, y), data):
-				elevation += (6.0 - edge_dist) * 1.8
+			var wall_blend := smoothstep(flat_outer, wall_crest, dist_to_path)
+			# Steepen into cliff edges
+			wall_blend = pow(wall_blend, 0.65)
+			var elevation := base_floor_elev + wall_increase * wall_blend
 
-			var elev_int := clampi(int(round(elevation / step_height)), 0, 40)
+			# Carve flat green trail into the cave opening on the steep wall (leaving the rock above/around it)
+			if on_cave_trail:
+				elevation = base_floor_elev
+			elif in_cave_Span and cave_trail_dist <= 2.5 and ((cave_side > 0 and x <= side_exit_pos.x + 1) or (cave_side < 0 and x >= side_exit_pos.x - 1)):
+				# Steep cave walls framing the cave mouth
+				elevation = maxf(elevation, base_floor_elev + 10.0)
+
+			# Outer X rim walls (keep Y seams governed by the narrow passageway so sections match cleanly)
+			var x_edge_dist := float(mini(x, map_width - 1 - x))
+			if x_edge_dist < 6.0 and not on_cave_trail:
+				elevation = maxf(elevation, base_floor_elev + WALL_MIN_HEIGHT_INCREASE + (6.0 - x_edge_dist) * 2.0)
+
+			var max_steps := int(round(26.0 / step_height))
+			var elev_int := clampi(int(round(elevation / step_height)), 0, max_steps)
 			data.set_cell_elevation(x, y, elev_int)
 
-			# Terrain type
-			var t_dist := dist_to_path + wobble
+			# Terrain type: green center same width (2.5), wider muddy flat area, then steep wall with cliff edges
+			var t_dist := dist_to_path + wobble * (1.0 - narrow)
 			var terrain := LevelData.TerrainType.DIRT
-			if t_dist < 2.5:
+			if on_cave_trail or dist_to_path <= 1.25:
 				terrain = LevelData.TerrainType.GRASS
-			elif t_dist < 3.5:
+			elif t_dist < green_half:
+				terrain = LevelData.TerrainType.GRASS
+			elif dist_to_path < flat_outer:
 				terrain = LevelData.TerrainType.MUD
-			elif t_dist < 5.5:
+			elif dist_to_path < debris_outer:
 				terrain = LevelData.TerrainType.DEBRIS
+			elif wall_blend > 0.35:
+				terrain = LevelData.TerrainType.STONE if n > 0.55 else LevelData.TerrainType.DIRT
 			data.set_cell_terrain(x, y, terrain)
 
-			# Static object placement
-			if t_dist > 2.0 and edge_dist > 2.0:
+			# Static object placement (keep the green center, cave trail, and end passageways clear)
+			var y_edge_dist := float(mini(y, map_depth - 1 - y))
+			if not on_cave_trail and dist_to_path > green_half + 1.0 and x_edge_dist > 2.0 and y_edge_dist > 3.0:
 				var obj_val := _noise_objects.get_noise_2d(float(x), float(y))
 				if terrain == LevelData.TerrainType.DEBRIS and obj_val > 0.45:
 					data.set_cell_object(x, y, LevelData.ObjectType.DEBRIS_PILE)
 				elif terrain == LevelData.TerrainType.DIRT and obj_val > 0.55:
 					data.set_cell_object(x, y, LevelData.ObjectType.TREE)
-				elif terrain == LevelData.TerrainType.DIRT and obj_val > 0.4:
+				elif (terrain == LevelData.TerrainType.DIRT or terrain == LevelData.TerrainType.STONE) and obj_val > 0.4:
 					data.set_cell_object(x, y, LevelData.ObjectType.ROCK_LARGE)
-				elif terrain == LevelData.TerrainType.MUD and obj_val > 0.6:
+				elif terrain == LevelData.TerrainType.MUD and obj_val > 0.62:
 					data.set_cell_object(x, y, LevelData.ObjectType.BUSH)
-				elif t_dist > 5.0 and _noise_ruins.get_noise_2d(float(x), float(y)) > RUIN_SITE_THRESHOLD:
-					# Ruin clusters on the shoulders: mostly broken columns, with scattered artifacts.
+				elif dist_to_path > flat_outer + 1.0 and _noise_ruins.get_noise_2d(float(x), float(y)) > RUIN_SITE_THRESHOLD:
 					var roll := _rng.randf()
 					if roll < 0.25:
 						data.set_cell_object(x, y, LevelData.ObjectType.RUIN_PILLAR)
 					elif roll < 0.45:
 						data.set_cell_object(x, y, LevelData.ObjectType.RUIN_ARTIFACT)
 
-	# Gameplay zones: Weapon spawn midway along side branch or shoulder
+	# Gameplay zones: Weapon spawns along the valley floor and near the cave trail
+	var weapon_y := clampi(int(round(map_depth * 0.3)), 6, map_depth - 10)
 	data.weapon_spawns.append({
-		"id": "relic_blade_1",
+		"id": "relic_blade_%d" % section_index,
 		"type": "ancient_blade",
-		"pos": Vector2i(clampi(int(_path_center_x(25)) + 4, 0, map_width - 1), 25),
+		"pos": Vector2i(clampi(int(round(_path_center_x(float(weapon_y)))) + 4, 4, map_width - 5), weapon_y),
 		"respawn": false
 	})
 	data.weapon_spawns.append({
-		"id": "sacred_relic_2",
+		"id": "sacred_relic_%d" % section_index,
 		"type": "sun_pendant",
-		"pos": Vector2i(side_exit_pos.x - 2, 40),
+		"pos": Vector2i(clampi(side_exit_pos.x - cave_side * 2, 4, map_width - 5), cave_y),
 		"respawn": false
 	})
+
+
+## Ensures row 0 and row (map_depth - 1) have identical elevations and terrain across all seeds
+## so adjacent valley sections meet without any visible seam.
+func _enforce_linear_seam_match(data: LevelData) -> void:
+	var base_steps := int(round(1.0 / step_height))
+	var center_x := map_width * 0.5
+	for x in range(map_width):
+		var dist := absf(float(x) - center_x)
+		var seam_n := (_noise_seam.get_noise_2d(float(x), 0.0) + 1.0) * 0.5
+		var wall_inc := maxf(10.0, lerpf(WALL_MIN_HEIGHT_INCREASE, WALL_MAX_HEIGHT_INCREASE, clampf(seam_n, 0.0, 1.0)))
+		var blend := pow(smoothstep(PASSAGE_HALF_WIDTH, PASSAGE_HALF_WIDTH + 3.0, dist), 0.65)
+		var elev := 1.0 + wall_inc * blend
+		var elev_steps := int(round(elev / step_height))
+		var terrain := LevelData.TerrainType.DIRT
+		if dist <= PASSAGE_HALF_WIDTH:
+			elev_steps = base_steps
+			terrain = LevelData.TerrainType.GRASS
+		elif dist <= PASSAGE_HALF_WIDTH + 1.0:
+			terrain = LevelData.TerrainType.DEBRIS
+		elif seam_n > 0.55:
+			terrain = LevelData.TerrainType.STONE
+
+		for seam_y: int in [0, map_depth - 1]:
+			data.set_cell_elevation(x, seam_y, elev_steps)
+			data.set_cell_terrain(x, seam_y, terrain)
+			data.set_cell_object(x, seam_y, LevelData.ObjectType.NONE)
+		# Keep the passageway floor level for 3 rows inside each end
+		if dist <= PASSAGE_HALF_WIDTH:
+			for inner_y: int in [1, 2, map_depth - 3, map_depth - 2]:
+				if inner_y >= 0 and inner_y < map_depth:
+					data.set_cell_elevation(x, inner_y, base_steps)
+					data.set_cell_terrain(x, inner_y, LevelData.TerrainType.GRASS)
+					data.set_cell_object(x, inner_y, LevelData.ObjectType.NONE)
 
 
 func _generate_open_area(data: LevelData) -> void:
@@ -340,6 +463,8 @@ func _add_guard_gate(data: LevelData, exit_id: String, guard_id: String, enemy_t
 		for x in range(exit_pos.x - GATE_RING_RADIUS, exit_pos.x + GATE_RING_RADIUS + 1):
 			if data.get_index(x, y) < 0 or maxi(absi(x - exit_pos.x), absi(y - exit_pos.y)) != GATE_RING_RADIUS:
 				continue
+			if mode == GenerationMode.LINEAR_PATH and y > exit_pos.y and absi(x - exit_pos.x) <= GATE_HALF_WIDTH:
+				continue
 			ring.append(Vector2i(x, y))
 			if y == ring_top and absi(x - exit_pos.x) <= GATE_HALF_WIDTH:
 				gap.append(Vector2i(x, y))
@@ -416,7 +541,8 @@ func _can_step(data: LevelData, from: Vector2i, to: Vector2i, goal: Vector2i) ->
 		return false
 	if to != goal and _is_solid(data.get_cell_object(to.x, to.y)):
 		return false
-	if absi(data.get_cell_elevation(to.x, to.y) - data.get_cell_elevation(from.x, from.y)) > 1:
+	var max_climb_steps := maxi(1, int(floor(0.6 / maxf(0.01, data.step_height))))
+	if absi(data.get_cell_elevation(to.x, to.y) - data.get_cell_elevation(from.x, from.y)) > max_climb_steps:
 		return false
 	if from.x != to.x and from.y != to.y:
 		for corner: Vector2i in [Vector2i(to.x, from.y), Vector2i(from.x, to.y)]:

@@ -13,7 +13,7 @@ const FEATURE_COUNT := [14, 5, 12, 8]
 const FEATURE_SIZE := [1, 2, 2, 1]
 
 @export var map_size := 80
-@export var step_height := 0.5
+@export var step_height := 0.5 / 3.0
 @export var road_half_width := 2.5
 @export var world_seed := 1337
 

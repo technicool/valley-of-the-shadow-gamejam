@@ -7,11 +7,13 @@ enum TerrainType { GRASS, MUD, DEBRIS, DIRT, STONE, WATER }
 ## Append-only: stored as integers in level resources.
 enum ObjectType { NONE, ROCK_SMALL, ROCK_LARGE, TREE, BUSH, DEBRIS_PILE, RUIN_PILLAR, RUIN_ARTIFACT }
 
+const DEFAULT_STEP_HEIGHT: float = 0.5 / 3.0
+
 @export_group("Map Dimensions")
 @export var width: int = 80
-@export var depth: int = 80
+@export var depth: int = 50
 @export var cell_size: float = 1.0
-@export var step_height: float = 0.5
+@export var step_height: float = DEFAULT_STEP_HEIGHT
 
 @export_group("Grid Data")
 ## Packed arrays of length (width * depth).

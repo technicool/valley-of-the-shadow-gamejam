@@ -8,3 +8,5 @@ extends Resource
 @export var target_entrance_id: String = "start"  ## Matching entrance id on target level
 @export var label: String = "To Next Area"
 @export var color: Color = Color(0.3, 0.8, 1.0)
+@export var is_cave_entrance: bool = false
+@export var cave_side: int = 0  ## -1 for left wall, 1 for right wall, 0 for non-wall portal
