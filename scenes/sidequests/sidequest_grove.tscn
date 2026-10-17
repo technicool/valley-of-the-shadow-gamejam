@@ -1,0 +1,67 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/sidequest/sidequest_level.gd" id="1_level"]
+[ext_resource type="Script" path="res://scripts/sidequest/sidequest_entrance.gd" id="2_entrance"]
+[ext_resource type="Script" path="res://scripts/sidequest/sidequest_exit.gd" id="3_exit"]
+[ext_resource type="Script" path="res://scripts/sidequest/sidequest_enemy_spawn.gd" id="4_enemy"]
+[ext_resource type="Script" path="res://scripts/sidequest/sidequest_weapon_spawn.gd" id="5_weapon"]
+[ext_resource type="Script" path="res://scripts/sidequest/sidequest_loot_spawn.gd" id="6_loot"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_exit_r"]
+radius = 16.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_exit_s"]
+radius = 16.0
+
+[node name="SidequestGrove" type="Node2D"]
+script = ExtResource("1_level")
+room_width = 24
+room_depth = 16
+accent_terrain = 2
+accent_density = 0.12
+autofill_seed = 42
+
+[node name="Terrain" type="TileMapLayer" parent="."]
+
+[node name="Entrance" type="Marker2D" parent="."]
+position = Vector2(400, 80)
+script = ExtResource("2_entrance")
+id = "start"
+
+[node name="ExitReturn" type="Area2D" parent="."]
+position = Vector2(400, 432)
+script = ExtResource("3_exit")
+id = "exit_return"
+label = "Back to the Valley"
+
+[node name="ExitReturnShape" type="CollisionShape2D" parent="ExitReturn"]
+shape = SubResource("CircleShape2D_exit_r")
+
+[node name="ExitToRuins" type="Area2D" parent="."]
+position = Vector2(656, 272)
+script = ExtResource("3_exit")
+id = "exit_to_ruins"
+target = 1
+target_sidequest_name = "ruins"
+target_entrance_id = "start"
+label = "Wade Toward the Ruins"
+color = Color(0.9, 0.6, 0.2, 1)
+
+[node name="ExitToRuinsShape" type="CollisionShape2D" parent="ExitToRuins"]
+shape = SubResource("CircleShape2D_exit_s")
+
+[node name="EnemySpawn1" type="Marker2D" parent="."]
+position = Vector2(208, 272)
+script = ExtResource("4_enemy")
+enemy_type = "bog_lurker"
+patrol_radius = 64.0
+
+[node name="WeaponSpawn1" type="Marker2D" parent="."]
+position = Vector2(592, 144)
+script = ExtResource("5_weapon")
+weapon_type = "sun_pendant"
+
+[node name="LootSpawn1" type="Marker2D" parent="."]
+position = Vector2(144, 400)
+script = ExtResource("6_loot")
+loot_type = "herb_bundle"

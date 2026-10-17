@@ -14,6 +14,10 @@ config/name="Valley of the Shadow"
 run/main_scene="res://scenes/start_menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
+[autoload]
+
+SidequestManager="*res://scripts/sidequest/sidequest_manager.gd"
+
 [input]
 
 move_forward={

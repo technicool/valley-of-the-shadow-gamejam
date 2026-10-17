@@ -14,7 +14,8 @@ func _ready() -> void:
 
 	if level_populator:
 		level_populator.level_exit_triggered.connect(_on_level_exit_triggered)
-		spawn_player(current_entrance_id)
+		var pending := SidequestManager.consume_pending_entrance_id()
+		spawn_player(pending if not pending.is_empty() else current_entrance_id)
 
 
 func spawn_player(entrance_id: String) -> void:
@@ -30,6 +31,11 @@ func _on_level_exit_triggered(exit_id: String, target_level_path: String, target
 
 func _change_level(exit_id: String, target_level_path: String, target_entrance_id: String) -> void:
 	print("Reached exit: ", exit_id, " -> Target: ", target_level_path, " [Entrance: ", target_entrance_id, "]")
+
+	if SidequestManager.is_sidequest_target(target_level_path):
+		# target_entrance_id here names the entrance to use on this main level on return.
+		SidequestManager.enter_sidequest(target_level_path, target_entrance_id)
+		return
 
 	if target_level_path != "" and ResourceLoader.exists(target_level_path):
 		var res: Resource = load(target_level_path)

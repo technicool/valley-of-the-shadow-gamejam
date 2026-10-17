@@ -1,0 +1,58 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/sidequest/sidequest_level.gd" id="1_level"]
+[ext_resource type="Script" path="res://scripts/sidequest/sidequest_entrance.gd" id="2_entrance"]
+[ext_resource type="Script" path="res://scripts/sidequest/sidequest_exit.gd" id="3_exit"]
+[ext_resource type="Script" path="res://scripts/sidequest/sidequest_enemy_spawn.gd" id="4_enemy"]
+[ext_resource type="Script" path="res://scripts/sidequest/sidequest_weapon_spawn.gd" id="5_weapon"]
+[ext_resource type="Script" path="res://scripts/sidequest/sidequest_loot_spawn.gd" id="6_loot"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_exit_r"]
+radius = 16.0
+
+[node name="SidequestCrypt" type="Node2D"]
+script = ExtResource("1_level")
+room_width = 16
+room_depth = 20
+accent_terrain = 3
+accent_density = 0.1
+autofill_seed = 7
+
+[node name="Terrain" type="TileMapLayer" parent="."]
+
+[node name="Entrance" type="Marker2D" parent="."]
+position = Vector2(272, 80)
+script = ExtResource("2_entrance")
+id = "start"
+
+[node name="ExitReturn" type="Area2D" parent="."]
+position = Vector2(272, 560)
+script = ExtResource("3_exit")
+id = "exit_return"
+label = "Climb Out"
+color = Color(0.6, 0.3, 0.8, 1)
+
+[node name="ExitReturnShape" type="CollisionShape2D" parent="ExitReturn"]
+shape = SubResource("CircleShape2D_exit_r")
+
+[node name="EnemySpawn1" type="Marker2D" parent="."]
+position = Vector2(400, 336)
+script = ExtResource("4_enemy")
+enemy_type = "bone_warden"
+patrol_radius = 32.0
+
+[node name="EnemySpawn2" type="Marker2D" parent="."]
+position = Vector2(144, 464)
+script = ExtResource("4_enemy")
+enemy_type = "bone_warden"
+patrol_radius = 32.0
+
+[node name="WeaponSpawn1" type="Marker2D" parent="."]
+position = Vector2(144, 336)
+script = ExtResource("5_weapon")
+weapon_type = "shadow_dagger"
+
+[node name="LootSpawn1" type="Marker2D" parent="."]
+position = Vector2(272, 464)
+script = ExtResource("6_loot")
+loot_type = "burial_ring"

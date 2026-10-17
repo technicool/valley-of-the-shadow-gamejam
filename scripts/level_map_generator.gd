@@ -102,6 +102,8 @@ func _generate_linear_path(data: LevelData) -> void:
 	var main_exit_pos := Vector2i(int(_path_center_x(exit_y)), exit_y)
 
 	data.entrances["start"] = start_pos
+	# Return point used when the player comes back from a sidequest map.
+	data.entrances["from_sidequest"] = Vector2i(clampi(int(_path_center_x(40)) + 26, 4, map_width - 5), 41)
 
 	var main_exit := LevelExitData.new()
 	main_exit.id = "exit_main"
@@ -115,6 +117,8 @@ func _generate_linear_path(data: LevelData) -> void:
 	var side_exit := LevelExitData.new()
 	side_exit.id = "exit_sidequest"
 	side_exit.grid_pos = side_exit_pos
+	side_exit.target_level_path = "sidequest://random"
+	side_exit.target_entrance_id = "from_sidequest"
 	side_exit.label = "Side Quest: The Sunken Ruins"
 	side_exit.color = Color(1.0, 0.6, 0.2)
 	data.exits.append(side_exit)
