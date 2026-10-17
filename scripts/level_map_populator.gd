@@ -385,23 +385,34 @@ func _spawn_tree(pos: Vector3, trunk_mat: Material, leaves_mat: Material, _rng: 
 
 
 func _spawn_rock(pos: Vector3, mat: Material, scale_factor: float, rng: RandomNumberGenerator) -> void:
-	var rock := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	var s := scale_factor * rng.randf_range(0.8, 1.2)
-	box.size = Vector3(s, s * 0.7, s)
-	rock.mesh = box
-	rock.material_override = mat
-	rock.position = pos + Vector3(0, s * 0.35, 0)
-	rock.rotation.y = rng.randf_range(0, TAU)
+	var rock_root := StaticBody3D.new()
+	rock_root.position = pos
+	rock_root.rotation.y = rng.randf_range(0, TAU)
 
-	var sb := StaticBody3D.new()
-	var col := CollisionShape3D.new()
+	var sx := scale_factor * rng.randf_range(0.85, 1.35)
+	var sy := scale_factor * rng.randf_range(0.65, 1.25)
+	var sz := scale_factor * rng.randf_range(0.85, 1.35)
+	var main_size := Vector3(sx, sy, sz)
+	_add_part(
+		rock_root,
+		_box_mesh(main_size),
+		mat,
+		Vector3(0.0, sy * 0.45, 0.0),
+		Vector3(rng.randf_range(-0.14, 0.14), rng.randf_range(-0.25, 0.25), rng.randf_range(-0.14, 0.14))
+	)
+	var lobe_size := Vector3(sx * 0.65, sy * 0.72, sz * 0.65)
+	_add_part(
+		rock_root,
+		_box_mesh(lobe_size),
+		mat,
+		Vector3(sx * 0.28, lobe_size.y * 0.42, sz * 0.18),
+		Vector3(rng.randf_range(-0.2, 0.2), rng.randf_range(0.2, 0.9), rng.randf_range(-0.2, 0.2))
+	)
+
 	var shape := BoxShape3D.new()
-	shape.size = box.size
-	col.shape = shape
-	sb.add_child(col)
-	rock.add_child(sb)
-	_props_node.add_child(rock)
+	shape.size = main_size
+	_add_collider(rock_root, shape, Vector3(0.0, sy * 0.45, 0.0))
+	_props_node.add_child(rock_root)
 
 
 func _spawn_debris_pile(pos: Vector3, mat: Material, rng: RandomNumberGenerator) -> void:
@@ -720,13 +731,22 @@ func _create_exit_portal(exit_item: LevelExitData) -> void:
 	portal_area.position = world_pos
 	portal_area.collision_mask = PLAYER_LAYER
 
-	var col := CollisionShape3D.new()
-	var shape := CylinderShape3D.new()
-	shape.radius = 2.0
-	shape.height = 4.0
-	col.shape = shape
-	col.position = Vector3(0, 2.0, 0)
 	var is_cave := exit_item.is_cave_entrance or SidequestManager.is_sidequest_target(exit_item.target_level_path)
+	var col := CollisionShape3D.new()
+	col.name = "ExitTriggerShape"
+	if is_cave:
+		var box_shape := BoxShape3D.new()
+		box_shape.size = Vector3(1.6, 3.2, 2.8)
+		col.shape = box_shape
+		col.position = Vector3(0.0, 1.6, 0.0)
+	else:
+		var shape := CylinderShape3D.new()
+		shape.radius = 2.0
+		shape.height = 4.0
+		col.shape = shape
+		col.position = Vector3(0.0, 2.0, 0.0)
+	portal_area.add_child(col)
+
 	if is_cave:
 		_build_cave_entrance_visual(portal_area, exit_item)
 	else:
@@ -770,7 +790,7 @@ func _build_cave_entrance_visual(portal_area: Area3D, exit_item: LevelExitData) 
 
 	var cave_root := Node3D.new()
 	cave_root.name = "CaveEntrance"
-	# Face the opening toward the valley center: if on right wall (+1), cave goes +X; if on left wall (-1), cave goes -X.
+	# Face the opening toward the valley center: if on right wall (+1), cave tunnel extends +X; if on left wall (-1), tunnel extends -X.
 	cave_root.rotation.y = 0.0 if side > 0 else PI
 	portal_area.add_child(cave_root)
 
@@ -786,21 +806,44 @@ func _build_cave_entrance_visual(portal_area: Area3D, exit_item: LevelExitData) 
 	moss_mat.albedo_color = Color("#5f7a38")
 	moss_mat.roughness = 0.9
 
-	# Left & right rock pillars framing the cave mouth along Z
-	_add_part(cave_root, _box_mesh(Vector3(2.6, 4.8, 1.3)), rock_mat, Vector3(0.4, 2.4, -2.1), Vector3(0.05, 0.0, -0.08))
-	_add_part(cave_root, _box_mesh(Vector3(2.6, 4.8, 1.3)), rock_mat, Vector3(0.4, 2.4, 2.1), Vector3(-0.05, 0.0, -0.08))
-	# Arch lintel / cliff overhang above the cave opening
-	_add_part(cave_root, _box_mesh(Vector3(3.0, 2.2, 5.6)), rock_mat, Vector3(0.5, 4.9, 0.0), Vector3(0.0, 0.0, 0.1))
-	_add_part(cave_root, _box_mesh(Vector3(2.2, 1.6, 4.4)), moss_mat, Vector3(0.2, 5.9, 0.0))
-	# Dark cave interior void inside the wall
-	_add_part(cave_root, _box_mesh(Vector3(1.4, 3.8, 3.0)), dark_mat, Vector3(1.1, 1.9, 0.0))
+	var grass_mat := StandardMaterial3D.new()
+	grass_mat.albedo_color = Color("#6f7a3b")
+	grass_mat.roughness = 0.85
+
+	# Green grass floor extending 3 meters into the cave tunnel from the cave entrance (x = 0 to x = 3.0)
+	var grass_floor := _add_part_returned(cave_root, _box_mesh(Vector3(3.0, 0.06, 2.8)), grass_mat, Vector3(1.5, 0.01, 0.0))
+	grass_floor.name = "CaveTunnelGrassFloor"
+
+	# Left & right rock walls forming the 3m tunnel into the cave walls
+	_add_part(cave_root, _box_mesh(Vector3(3.6, 4.4, 1.3)), rock_mat, Vector3(1.5, 2.2, -2.05), Vector3(0.04, 0.0, -0.05))
+	_add_part(cave_root, _box_mesh(Vector3(3.6, 4.4, 1.3)), rock_mat, Vector3(1.5, 2.2, 2.05), Vector3(-0.04, 0.0, -0.05))
+	# Rocky crags framing the front mouth of the tunnel
+	_add_part(cave_root, _box_mesh(Vector3(1.4, 3.8, 1.4)), rock_mat, Vector3(0.1, 1.9, -2.15), Vector3(0.08, 0.18, -0.06))
+	_add_part(cave_root, _box_mesh(Vector3(1.4, 3.8, 1.4)), rock_mat, Vector3(0.1, 1.9, 2.15), Vector3(-0.08, -0.18, -0.06))
+	# Arch roof / cliff overhang spanning the full 3m tunnel depth
+	var tunnel_roof := _add_part_returned(cave_root, _box_mesh(Vector3(3.8, 1.8, 5.4)), rock_mat, Vector3(1.6, 4.5, 0.0), Vector3(0.0, 0.0, 0.05))
+	tunnel_roof.name = "CaveTunnelRoof"
+	_add_part(cave_root, _box_mesh(Vector3(3.0, 1.2, 4.2)), moss_mat, Vector3(1.4, 5.5, 0.0))
+	# Dark cave interior void at the back of the 3m grass tunnel
+	var back_void := _add_part_returned(cave_root, _box_mesh(Vector3(0.8, 3.8, 3.0)), dark_mat, Vector3(3.3, 1.9, 0.0))
+	back_void.name = "CaveTunnelBackVoid"
 
 	var light := OmniLight3D.new()
 	light.light_color = Color(0.45, 0.85, 0.5)
 	light.light_energy = 1.6
 	light.omni_range = 8.0
-	light.position = Vector3(-0.5, 2.2, 0.0)
+	light.position = Vector3(0.2, 2.2, 0.0)
 	cave_root.add_child(light)
+
+
+func _add_part_returned(root: Node3D, mesh: Mesh, mat: Material, offset: Vector3, euler: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.mesh = mesh
+	part.material_override = mat
+	part.position = offset
+	part.rotation = euler
+	root.add_child(part)
+	return part
 
 
 ## Query helper for player spawn location
