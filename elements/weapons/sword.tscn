@@ -42,6 +42,9 @@ weapon_id = "sword"
 display_name = "Sword"
 damage = 10
 is_ranged = false
+scripture_quote = "...the sword of the Spirit, which is the word of God."
+scripture_reference = "Ephesians 6:17"
+suggestion = "Press Space to swing."
 
 [node name="Collision" type="CollisionShape3D" parent="."]
 position = Vector3(0, 0.9, 0)

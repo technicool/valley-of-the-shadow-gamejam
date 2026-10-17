@@ -42,6 +42,9 @@ weapon_id = "dagger"
 display_name = "Dagger"
 damage = 6
 is_ranged = false
+scripture_quote = "For the word of God is quick, and powerful, and sharper than any twoedged sword."
+scripture_reference = "Hebrews 4:12"
+suggestion = "Press Space to strike."
 
 [node name="Collision" type="CollisionShape3D" parent="."]
 position = Vector3(0, 0.9, 0)

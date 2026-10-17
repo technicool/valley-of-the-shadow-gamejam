@@ -28,7 +28,7 @@ enum ObjectType { NONE, ROCK_SMALL, ROCK_LARGE, TREE, BUSH, DEBRIS_PILE, RUIN_PI
 @export var exits: Array[LevelExitData] = []
 
 @export_group("Gameplay Spawns & Zones")
-## Array of Dictionaries: {"id": "sword_1", "type": "sword", "pos": Vector2i(x, y), "respawn": false}
+## Array of Dictionaries: {"id": "relic_blade_1", "type": "ancient_blade", "pos": Vector2i(x, y), "respawn": false}
 @export var weapon_spawns: Array[Dictionary] = []
 ## Array of Dictionaries: {
 ##   "id": "guard_1",

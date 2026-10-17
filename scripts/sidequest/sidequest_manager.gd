@@ -7,7 +7,6 @@ extends Node
 
 const SIDEQUEST_PREFIX := "sidequest://"
 const RANDOM_KEYWORD := "random"
-const MAIN_SCENE_PATH := "res://scenes/main.tscn"
 
 ## Registry of sidequest name -> scene path. Add new example maps here.
 const SIDEQUEST_SCENES := {
@@ -16,7 +15,11 @@ const SIDEQUEST_SCENES := {
 	"grove": "res://scenes/sidequests/sidequest_grove.tscn",
 }
 
-var _return_scene_path: String = MAIN_SCENE_PATH
+## Emitted when the world should swap to a sidequest scene. The Game shell handles it.
+signal sidequest_requested(scene_path: String)
+## Emitted when the player should return to the main level at the given entrance.
+signal main_requested(entrance_id: String)
+
 var _return_entrance_id: String = "start"
 var _pending_entrance_id: String = ""
 
@@ -38,16 +41,14 @@ func enter_sidequest(target_level_path: String, return_entrance_id: String) -> v
 	if scene_path.is_empty():
 		push_warning("SidequestManager: no sidequest scenes registered, staying on main level.")
 		return
-	_return_scene_path = MAIN_SCENE_PATH
 	_return_entrance_id = return_entrance_id
 	_pending_entrance_id = "start"
-	get_tree().change_scene_to_file(scene_path)
+	sidequest_requested.emit(scene_path)
 
 
-## Called from a SidequestExit node inside a sidequest scene.
+## Called from an ExitNode inside a sidequest scene.
 func exit_to_main() -> void:
-	_pending_entrance_id = _return_entrance_id
-	get_tree().change_scene_to_file(_return_scene_path)
+	main_requested.emit(_return_entrance_id)
 
 
 func exit_to_sidequest(sidequest_name: String, target_entrance_id: String) -> void:
@@ -57,7 +58,7 @@ func exit_to_sidequest(sidequest_name: String, target_entrance_id: String) -> vo
 		exit_to_main()
 		return
 	_pending_entrance_id = target_entrance_id
-	get_tree().change_scene_to_file(scene_path)
+	sidequest_requested.emit(scene_path)
 
 
 ## Resolves "random" (optionally excluding the current scene) or an explicit registered name.

@@ -37,6 +37,9 @@ weapon_id = "slingshot"
 display_name = "Slingshot"
 damage = 4
 is_ranged = true
+scripture_quote = "So David prevailed over the Philistine with a sling and with a stone."
+scripture_reference = "1 Samuel 17:50"
+suggestion = "Press Space to fire stones."
 
 [node name="Collision" type="CollisionShape3D" parent="."]
 position = Vector3(0, 0.9, 0)

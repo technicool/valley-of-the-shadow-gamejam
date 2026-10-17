@@ -44,9 +44,7 @@ func _change_level(exit_id: String, target_level_path: String, target_entrance_i
 			level_populator.rebuild_all()
 			spawn_player(target_entrance_id)
 			return
-		elif res is PackedScene:
-			get_tree().change_scene_to_packed(res as PackedScene)
-			return
+		push_warning("Level: exit target '%s' is not LevelData; ignoring." % target_level_path)
 
 	# No valid target: return the player to the target entrance on this level.
 	spawn_player(target_entrance_id)

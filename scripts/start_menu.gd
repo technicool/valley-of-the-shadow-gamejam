@@ -1,6 +1,6 @@
 extends Control
 
-const GAME_SCENE_PATH := "res://scenes/main.tscn"
+const GAME_SCENE_PATH := "res://scenes/game.tscn"
 const EDITOR_SCENE_PATH := "res://scenes/editor.tscn"
 
 @onready var start_button: Button = $Menu/Buttons/StartButton

@@ -11,6 +11,12 @@ extends Node3D
 signal level_exit_triggered(exit_id: String, target_level_path: String, target_entrance_id: String)
 
 const PLAYER_LAYER := 2  # Matches collision_layer in scenes/player.tscn.
+const WEAPON_SCENES := {
+	"ancient_blade": preload("res://elements/weapons/sword.tscn"),
+	"greatsword": preload("res://elements/weapons/sword.tscn"),
+	"shadow_dagger": preload("res://elements/weapons/dagger.tscn"),
+	"sun_pendant": preload("res://elements/weapons/slingshot.tscn"),
+}
 
 @export_group("Data & Generation")
 @export var level_data: LevelData:
@@ -439,47 +445,15 @@ func _populate_gameplay_elements() -> void:
 
 
 func _create_weapon_pickup(info: Dictionary) -> void:
+	var weapon_type: String = info.get("type", "")
+	if not WEAPON_SCENES.has(weapon_type):
+		push_warning("LevelMapPopulator: no pickup scene for weapon type '%s'." % weapon_type)
+		return
 	var grid_pos: Vector2i = info.get("pos", Vector2i.ZERO)
-	var world_pos := level_data.get_world_pos(grid_pos.x, grid_pos.y) + Vector3(0, 0.8, 0)
-
-	var pickup := Area3D.new()
+	var scene: PackedScene = WEAPON_SCENES[weapon_type]
+	var pickup := scene.instantiate() as Node3D
 	pickup.name = "Weapon_" + str(info.get("id", "pickup"))
-	pickup.position = world_pos
-
-	var col := CollisionShape3D.new()
-	var shape := SphereShape3D.new()
-	shape.radius = 0.8
-	col.shape = shape
-	pickup.add_child(col)
-
-	# Floating weapon visual mesh
-	var mesh_inst := MeshInstance3D.new()
-	var blade_mesh := BoxMesh.new()
-	blade_mesh.size = Vector3(0.12, 1.1, 0.3)
-	mesh_inst.mesh = blade_mesh
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(1.0, 0.85, 0.3)
-	mat.metallic = 0.9
-	mat.roughness = 0.2
-	mat.emission_enabled = true
-	mat.emission = Color(0.9, 0.7, 0.1)
-	mat.emission_energy_multiplier = 1.5
-	mesh_inst.material_override = mat
-	pickup.add_child(mesh_inst)
-
-	# Pedestal
-	var pedestal := MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.4
-	cyl.bottom_radius = 0.5
-	cyl.height = 0.6
-	pedestal.mesh = cyl
-	var ped_mat := StandardMaterial3D.new()
-	ped_mat.albedo_color = Color(0.3, 0.3, 0.35)
-	pedestal.material_override = ped_mat
-	pedestal.position = Vector3(0, -0.5, 0)
-	pickup.add_child(pedestal)
-
+	pickup.position = level_data.get_world_pos(grid_pos.x, grid_pos.y)
 	_gameplay_node.add_child(pickup)
 
 
