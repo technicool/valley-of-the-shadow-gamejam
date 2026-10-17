@@ -47,7 +47,7 @@ const DEFAULT_EXIT_COLOR := Color(0.3, 0.8, 1.0, 1.0)
 ## Lifts the player slightly above the spawn marker so the capsule does not start inside the ground.
 const PLAYER_LIFT := 0.5
 
-@export_multiline var layout: String = ""
+@export_multiline("monospace") var layout: String = ""
 @export var exit_links: Dictionary = {}
 
 var _spawn_markers: Dictionary = {}

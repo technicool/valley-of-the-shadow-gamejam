@@ -1,0 +1,436 @@
+[gd_scene load_steps=55 format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_skin"]
+albedo_color = Color(0.8, 0.56, 0.38, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_beard"]
+albedo_color = Color(0.22, 0.14, 0.09, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cloth"]
+albedo_color = Color(0.93, 0.9, 0.82, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_band"]
+albedo_color = Color(0.45, 0.3, 0.18, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tunic"]
+albedo_color = Color(0.8, 0.71, 0.55, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tunic_dark"]
+albedo_color = Color(0.7, 0.6, 0.43, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_apron"]
+albedo_color = Color(0.78, 0.76, 0.7, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_leather"]
+albedo_color = Color(0.4, 0.26, 0.14, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wood"]
+albedo_color = Color(0.52, 0.34, 0.18, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gold"]
+albedo_color = Color(0.85, 0.64, 0.2, 1)
+metallic = 0.4
+roughness = 0.45
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_blade"]
+albedo_color = Color(0.98, 0.88, 0.48, 1)
+metallic = 0.4
+roughness = 0.3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_eye"]
+albedo_color = Color(0.1, 0.07, 0.05, 1)
+
+[sub_resource type="SphereMesh" id="SphereMesh_head"]
+radius = 0.115
+height = 0.23
+radial_segments = 8
+rings = 4
+material = SubResource("StandardMaterial3D_skin")
+
+[sub_resource type="BoxMesh" id="BoxMesh_eye_l"]
+size = Vector3(0.03, 0.025, 0.01)
+material = SubResource("StandardMaterial3D_eye")
+
+[sub_resource type="BoxMesh" id="BoxMesh_eye_r"]
+size = Vector3(0.03, 0.025, 0.01)
+material = SubResource("StandardMaterial3D_eye")
+
+[sub_resource type="BoxMesh" id="BoxMesh_beard"]
+size = Vector3(0.2, 0.14, 0.1)
+material = SubResource("StandardMaterial3D_beard")
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_neck"]
+top_radius = 0.05
+bottom_radius = 0.05
+height = 0.12
+radial_segments = 6
+rings = 1
+material = SubResource("StandardMaterial3D_skin")
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_band"]
+top_radius = 0.14
+bottom_radius = 0.14
+height = 0.04
+radial_segments = 8
+rings = 1
+material = SubResource("StandardMaterial3D_band")
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_cap"]
+top_radius = 0.13
+bottom_radius = 0.145
+height = 0.145
+radial_segments = 8
+rings = 1
+material = SubResource("StandardMaterial3D_cloth")
+
+[sub_resource type="BoxMesh" id="BoxMesh_flap_l"]
+size = Vector3(0.035, 0.28, 0.16)
+material = SubResource("StandardMaterial3D_cloth")
+
+[sub_resource type="BoxMesh" id="BoxMesh_flap_r"]
+size = Vector3(0.035, 0.28, 0.16)
+material = SubResource("StandardMaterial3D_cloth")
+
+[sub_resource type="BoxMesh" id="BoxMesh_drape"]
+size = Vector3(0.26, 0.34, 0.05)
+material = SubResource("StandardMaterial3D_cloth")
+
+[sub_resource type="BoxMesh" id="BoxMesh_torso"]
+size = Vector3(0.46, 0.36, 0.25)
+material = SubResource("StandardMaterial3D_tunic")
+
+[sub_resource type="BoxMesh" id="BoxMesh_apron"]
+size = Vector3(0.36, 0.28, 0.03)
+material = SubResource("StandardMaterial3D_apron")
+
+[sub_resource type="BoxMesh" id="BoxMesh_strap_l"]
+size = Vector3(0.05, 0.3206, 0.02)
+material = SubResource("StandardMaterial3D_leather")
+
+[sub_resource type="BoxMesh" id="BoxMesh_strap_r"]
+size = Vector3(0.05, 0.3206, 0.02)
+material = SubResource("StandardMaterial3D_leather")
+
+[sub_resource type="BoxMesh" id="BoxMesh_sash"]
+size = Vector3(0.49, 0.05, 0.27)
+material = SubResource("StandardMaterial3D_apron")
+
+[sub_resource type="BoxMesh" id="BoxMesh_belt"]
+size = Vector3(0.5, 0.05, 0.28)
+material = SubResource("StandardMaterial3D_leather")
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_skirt"]
+top_radius = 0.245
+bottom_radius = 0.36
+height = 0.655
+radial_segments = 8
+rings = 1
+material = SubResource("StandardMaterial3D_tunic_dark")
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_leg_l"]
+top_radius = 0.045
+bottom_radius = 0.045
+height = 0.25
+radial_segments = 6
+rings = 1
+material = SubResource("StandardMaterial3D_skin")
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_leg_r"]
+top_radius = 0.045
+bottom_radius = 0.045
+height = 0.25
+radial_segments = 6
+rings = 1
+material = SubResource("StandardMaterial3D_skin")
+
+[sub_resource type="BoxMesh" id="BoxMesh_foot_l"]
+size = Vector3(0.1, 0.06, 0.2)
+material = SubResource("StandardMaterial3D_skin")
+
+[sub_resource type="BoxMesh" id="BoxMesh_foot_r"]
+size = Vector3(0.1, 0.06, 0.2)
+material = SubResource("StandardMaterial3D_skin")
+
+[sub_resource type="BoxMesh" id="BoxMesh_sole_l"]
+size = Vector3(0.12, 0.03, 0.24)
+material = SubResource("StandardMaterial3D_leather")
+
+[sub_resource type="BoxMesh" id="BoxMesh_sole_r"]
+size = Vector3(0.12, 0.03, 0.24)
+material = SubResource("StandardMaterial3D_leather")
+
+[sub_resource type="BoxMesh" id="BoxMesh_strapfoot_l"]
+size = Vector3(0.13, 0.02, 0.03)
+material = SubResource("StandardMaterial3D_leather")
+
+[sub_resource type="BoxMesh" id="BoxMesh_strapfoot_r"]
+size = Vector3(0.13, 0.02, 0.03)
+material = SubResource("StandardMaterial3D_leather")
+
+[sub_resource type="BoxMesh" id="BoxMesh_sleeve_l"]
+size = Vector3(0.14, 0.17042, 0.14)
+material = SubResource("StandardMaterial3D_tunic")
+
+[sub_resource type="BoxMesh" id="BoxMesh_skinu_l"]
+size = Vector3(0.1, 0.0804, 0.1)
+material = SubResource("StandardMaterial3D_skin")
+
+[sub_resource type="BoxMesh" id="BoxMesh_fore_l"]
+size = Vector3(0.1, 0.26019, 0.1)
+material = SubResource("StandardMaterial3D_skin")
+
+[sub_resource type="BoxMesh" id="BoxMesh_fist_l"]
+size = Vector3(0.11, 0.12, 0.11)
+material = SubResource("StandardMaterial3D_skin")
+
+[sub_resource type="BoxMesh" id="BoxMesh_sleeve_r"]
+size = Vector3(0.14, 0.19925, 0.14)
+material = SubResource("StandardMaterial3D_tunic")
+
+[sub_resource type="BoxMesh" id="BoxMesh_skinu_r"]
+size = Vector3(0.1, 0.09487, 0.1)
+material = SubResource("StandardMaterial3D_skin")
+
+[sub_resource type="BoxMesh" id="BoxMesh_fore_r"]
+size = Vector3(0.1, 0.19235, 0.1)
+material = SubResource("StandardMaterial3D_skin")
+
+[sub_resource type="BoxMesh" id="BoxMesh_fist_r"]
+size = Vector3(0.11, 0.12, 0.11)
+material = SubResource("StandardMaterial3D_skin")
+
+[sub_resource type="BoxMesh" id="BoxMesh_staff"]
+size = Vector3(0.04, 1.791, 0.04)
+material = SubResource("StandardMaterial3D_wood")
+
+[sub_resource type="BoxMesh" id="BoxMesh_hook_1"]
+size = Vector3(0.04, 0.0825, 0.04)
+material = SubResource("StandardMaterial3D_wood")
+
+[sub_resource type="BoxMesh" id="BoxMesh_hook_2"]
+size = Vector3(0.04, 0.05, 0.04)
+material = SubResource("StandardMaterial3D_wood")
+
+[sub_resource type="BoxMesh" id="BoxMesh_hook_3"]
+size = Vector3(0.04, 0.0539, 0.04)
+material = SubResource("StandardMaterial3D_wood")
+
+[sub_resource type="BoxMesh" id="BoxMesh_hook_4"]
+size = Vector3(0.04, 0.0447, 0.04)
+material = SubResource("StandardMaterial3D_wood")
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_grip"]
+top_radius = 0.014
+bottom_radius = 0.014
+height = 0.11
+radial_segments = 6
+rings = 1
+material = SubResource("StandardMaterial3D_leather")
+
+[sub_resource type="SphereMesh" id="SphereMesh_pommel"]
+radius = 0.022
+height = 0.044
+radial_segments = 6
+rings = 3
+material = SubResource("StandardMaterial3D_gold")
+
+[sub_resource type="BoxMesh" id="BoxMesh_guard"]
+size = Vector3(0.12, 0.022, 0.03)
+material = SubResource("StandardMaterial3D_gold")
+
+[sub_resource type="BoxMesh" id="BoxMesh_blade"]
+size = Vector3(0.034, 0.6, 0.008)
+material = SubResource("StandardMaterial3D_blade")
+
+[node name="Shepherd" type="Node3D"]
+
+[node name="Head" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.555, 0)
+mesh = SubResource("SphereMesh_head")
+
+[node name="EyeL" type="MeshInstance3D" parent="."]
+position = Vector3(-0.045, 1.58, -0.112)
+mesh = SubResource("BoxMesh_eye_l")
+
+[node name="EyeR" type="MeshInstance3D" parent="."]
+position = Vector3(0.045, 1.58, -0.112)
+mesh = SubResource("BoxMesh_eye_r")
+
+[node name="Beard" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.42, -0.06)
+mesh = SubResource("BoxMesh_beard")
+
+[node name="Neck" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.37, 0)
+mesh = SubResource("CylinderMesh_neck")
+
+[node name="HeadBand" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.635, 0)
+mesh = SubResource("CylinderMesh_band")
+
+[node name="HeadCloth" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.7275, 0)
+mesh = SubResource("CylinderMesh_cap")
+
+[node name="ClothFlapL" type="MeshInstance3D" parent="."]
+position = Vector3(-0.135, 1.5, 0)
+mesh = SubResource("BoxMesh_flap_l")
+
+[node name="ClothFlapR" type="MeshInstance3D" parent="."]
+position = Vector3(0.135, 1.5, 0)
+mesh = SubResource("BoxMesh_flap_r")
+
+[node name="ClothDrape" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.45, 0.12)
+mesh = SubResource("BoxMesh_drape")
+
+[node name="Torso" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.18, 0)
+mesh = SubResource("BoxMesh_torso")
+
+[node name="Apron" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.19, -0.14)
+mesh = SubResource("BoxMesh_apron")
+
+[node name="StrapL" type="MeshInstance3D" parent="."]
+position = Vector3(-0.18, 1.2, -0.16)
+rotation = Vector3(0, 0, 0.0624)
+mesh = SubResource("BoxMesh_strap_l")
+
+[node name="StrapR" type="MeshInstance3D" parent="."]
+position = Vector3(0.18, 1.2, -0.16)
+rotation = Vector3(0, 0, -0.0624)
+mesh = SubResource("BoxMesh_strap_r")
+
+[node name="Sash" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.03, 0)
+mesh = SubResource("BoxMesh_sash")
+
+[node name="Belt" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.98, 0)
+mesh = SubResource("BoxMesh_belt")
+
+[node name="Skirt" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.6275, 0)
+scale = Vector3(1, 1, 0.6)
+mesh = SubResource("CylinderMesh_skirt")
+
+[node name="LegL" type="MeshInstance3D" parent="."]
+position = Vector3(-0.1, 0.2, 0)
+mesh = SubResource("CylinderMesh_leg_l")
+
+[node name="LegR" type="MeshInstance3D" parent="."]
+position = Vector3(0.1, 0.2, 0)
+mesh = SubResource("CylinderMesh_leg_r")
+
+[node name="FootL" type="MeshInstance3D" parent="."]
+position = Vector3(-0.1, 0.06, -0.03)
+mesh = SubResource("BoxMesh_foot_l")
+
+[node name="FootR" type="MeshInstance3D" parent="."]
+position = Vector3(0.1, 0.06, -0.03)
+mesh = SubResource("BoxMesh_foot_r")
+
+[node name="SoleL" type="MeshInstance3D" parent="."]
+position = Vector3(-0.1, 0.015, -0.03)
+mesh = SubResource("BoxMesh_sole_l")
+
+[node name="SoleR" type="MeshInstance3D" parent="."]
+position = Vector3(0.1, 0.015, -0.03)
+mesh = SubResource("BoxMesh_sole_r")
+
+[node name="SandalStrapL" type="MeshInstance3D" parent="."]
+position = Vector3(-0.1, 0.09, -0.07)
+mesh = SubResource("BoxMesh_strapfoot_l")
+
+[node name="SandalStrapR" type="MeshInstance3D" parent="."]
+position = Vector3(0.1, 0.09, -0.07)
+mesh = SubResource("BoxMesh_strapfoot_r")
+
+[node name="SleeveL" type="MeshInstance3D" parent="."]
+position = Vector3(-0.286, 1.225, 0)
+rotation = Vector3(0, 0, -0.0705)
+mesh = SubResource("BoxMesh_sleeve_l")
+
+[node name="UpperArmSkinL" type="MeshInstance3D" parent="."]
+position = Vector3(-0.296, 1.1, 0)
+rotation = Vector3(0, 0, -0.0997)
+mesh = SubResource("BoxMesh_skinu_l")
+
+[node name="ForearmL" type="MeshInstance3D" parent="."]
+position = Vector3(-0.305, 0.93, 0)
+rotation = Vector3(0, 0, -0.0384)
+mesh = SubResource("BoxMesh_fore_l")
+
+[node name="FistL" type="MeshInstance3D" parent="."]
+position = Vector3(-0.31, 0.8, 0)
+mesh = SubResource("BoxMesh_fist_l")
+
+[node name="SleeveR" type="MeshInstance3D" parent="."]
+position = Vector3(0.31, 1.215, 0)
+rotation = Vector3(0, 0, 0.3057)
+mesh = SubResource("BoxMesh_sleeve_r")
+
+[node name="UpperArmSkinR" type="MeshInstance3D" parent="."]
+position = Vector3(0.355, 1.075, 0)
+rotation = Vector3(0, 0, 0.3217)
+mesh = SubResource("BoxMesh_skinu_r")
+
+[node name="ForearmR" type="MeshInstance3D" parent="."]
+position = Vector3(0.415, 1.115, 0)
+rotation = Vector3(0, 0, -0.4875)
+mesh = SubResource("BoxMesh_fore_r")
+
+[node name="FistR" type="MeshInstance3D" parent="."]
+position = Vector3(0.46, 1.2, 0)
+mesh = SubResource("BoxMesh_fist_r")
+
+[node name="RightHand" type="Node3D" parent="."]
+position = Vector3(0.46, 1.2, 0)
+
+[node name="LeftHand" type="Node3D" parent="."]
+position = Vector3(-0.31, 0.8, 0)
+
+[node name="Staff" type="MeshInstance3D" parent="."]
+position = Vector3(0.46, 0.89, -0.06)
+rotation = Vector3(0, 0, -0.1119)
+mesh = SubResource("BoxMesh_staff")
+
+[node name="StaffHook1" type="MeshInstance3D" parent="."]
+position = Vector3(0.57, 1.82, -0.06)
+rotation = Vector3(0, 0, -0.245)
+mesh = SubResource("BoxMesh_hook_1")
+
+[node name="StaffHook2" type="MeshInstance3D" parent="."]
+position = Vector3(0.6, 1.875, -0.06)
+rotation = Vector3(0, 0, -0.9273)
+mesh = SubResource("BoxMesh_hook_2")
+
+[node name="StaffHook3" type="MeshInstance3D" parent="."]
+position = Vector3(0.645, 1.88, -0.06)
+rotation = Vector3(0, 0, 1.1903)
+mesh = SubResource("BoxMesh_hook_3")
+
+[node name="StaffHook4" type="MeshInstance3D" parent="."]
+position = Vector3(0.68, 1.85, -0.06)
+rotation = Vector3(0, 0, 0.4636)
+mesh = SubResource("BoxMesh_hook_4")
+
+[node name="Sword" type="Node3D" parent="."]
+position = Vector3(-0.12, 0.97, -0.27)
+rotation = Vector3(0, 0, -0.32)
+
+[node name="Grip" type="MeshInstance3D" parent="Sword"]
+position = Vector3(0, 0.055, 0)
+mesh = SubResource("CylinderMesh_grip")
+
+[node name="Pommel" type="MeshInstance3D" parent="Sword"]
+position = Vector3(0, 0.12, 0)
+mesh = SubResource("SphereMesh_pommel")
+
+[node name="Guard" type="MeshInstance3D" parent="Sword"]
+mesh = SubResource("BoxMesh_guard")
+
+[node name="Blade" type="MeshInstance3D" parent="Sword"]
+position = Vector3(0, -0.311, 0)
+mesh = SubResource("BoxMesh_blade")
