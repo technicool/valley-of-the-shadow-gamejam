@@ -1,0 +1,26 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://elements/terrain/terrain_tile.gd" id="1_tile"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_mud"]
+size = Vector3(2, 1, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_mud"]
+size = Vector3(2, 1, 2)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_mud"]
+albedo_color = Color(0.353, 0.251, 0.188, 1)
+roughness = 1.0
+
+[node name="MudTile" type="StaticBody3D"]
+script = ExtResource("1_tile")
+terrain_type = "mud"
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+position = Vector3(0, -0.5, 0)
+mesh = SubResource("BoxMesh_mud")
+material_override = SubResource("StandardMaterial3D_mud")
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+position = Vector3(0, -0.5, 0)
+shape = SubResource("BoxShape3D_mud")

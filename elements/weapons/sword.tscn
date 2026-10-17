@@ -1,0 +1,71 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://elements/weapons/weapon_pickup.gd" id="1_pickup"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_trigger"]
+radius = 0.8
+
+[sub_resource type="BoxMesh" id="BoxMesh_blade"]
+size = Vector3(0.08, 1, 0.02)
+
+[sub_resource type="BoxMesh" id="BoxMesh_guard"]
+size = Vector3(0.34, 0.05, 0.06)
+
+[sub_resource type="BoxMesh" id="BoxMesh_grip"]
+size = Vector3(0.05, 0.22, 0.05)
+
+[sub_resource type="BoxMesh" id="BoxMesh_pommel"]
+size = Vector3(0.07, 0.07, 0.07)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_steel"]
+albedo_color = Color(0.79, 0.82, 0.86, 1)
+metallic = 0.9
+roughness = 0.25
+emission_enabled = true
+emission = Color(0.5, 0.55, 0.65, 1)
+emission_energy_multiplier = 0.35
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_gold"]
+albedo_color = Color(0.85, 0.68, 0.25, 1)
+metallic = 0.8
+roughness = 0.3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_leather"]
+albedo_color = Color(0.35, 0.22, 0.12, 1)
+roughness = 0.9
+
+[node name="Sword" type="Area3D"]
+collision_layer = 0
+collision_mask = 2
+script = ExtResource("1_pickup")
+weapon_id = "sword"
+display_name = "Sword"
+damage = 10
+is_ranged = false
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+position = Vector3(0, 0.9, 0)
+shape = SubResource("SphereShape3D_trigger")
+
+[node name="Visual" type="Node3D" parent="."]
+position = Vector3(0, 0.9, 0)
+
+[node name="Blade" type="MeshInstance3D" parent="Visual"]
+position = Vector3(0, 0.55, 0)
+mesh = SubResource("BoxMesh_blade")
+material_override = SubResource("StandardMaterial3D_steel")
+
+[node name="Guard" type="MeshInstance3D" parent="Visual"]
+position = Vector3(0, 0.04, 0)
+mesh = SubResource("BoxMesh_guard")
+material_override = SubResource("StandardMaterial3D_gold")
+
+[node name="Grip" type="MeshInstance3D" parent="Visual"]
+position = Vector3(0, -0.09, 0)
+mesh = SubResource("BoxMesh_grip")
+material_override = SubResource("StandardMaterial3D_leather")
+
+[node name="Pommel" type="MeshInstance3D" parent="Visual"]
+position = Vector3(0, -0.22, 0)
+mesh = SubResource("BoxMesh_pommel")
+material_override = SubResource("StandardMaterial3D_gold")

@@ -1,0 +1,67 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://elements/markers/exit_node.gd" id="1_exit"]
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_exit"]
+radius = 1.2
+height = 2.5
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_pad"]
+top_radius = 1.2
+bottom_radius = 1.2
+height = 0.05
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pad"]
+albedo_color = Color(0.3, 0.8, 1, 1)
+emission_enabled = true
+emission = Color(0.3, 0.8, 1, 1)
+emission_energy_multiplier = 0.8
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_beacon"]
+top_radius = 0.12
+bottom_radius = 0.12
+height = 4.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_beacon"]
+transparency = 1
+albedo_color = Color(0.3, 0.8, 1, 0.5)
+emission_enabled = true
+emission = Color(0.3, 0.8, 1, 1)
+emission_energy_multiplier = 2.0
+
+[node name="ExitNode" type="Area3D"]
+collision_layer = 0
+collision_mask = 2
+script = ExtResource("1_exit")
+target_sidequest = ""
+target_entrance_id = "start"
+label = "Return to the Valley"
+color = Color(0.3, 0.8, 1, 1)
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+position = Vector3(0, 1.25, 0)
+shape = SubResource("CylinderShape3D_exit")
+
+[node name="Pad" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.025, 0)
+mesh = SubResource("CylinderMesh_pad")
+material_override = SubResource("StandardMaterial3D_pad")
+
+[node name="Beacon" type="MeshInstance3D" parent="."]
+position = Vector3(0, 2, 0)
+mesh = SubResource("CylinderMesh_beacon")
+material_override = SubResource("StandardMaterial3D_beacon")
+
+[node name="Light" type="OmniLight3D" parent="."]
+position = Vector3(0, 2, 0)
+light_color = Color(0.3, 0.8, 1, 1)
+light_energy = 1.5
+omni_range = 6.0
+
+[node name="Label" type="Label3D" parent="."]
+position = Vector3(0, 4.6, 0)
+pixel_size = 0.01
+billboard = 1
+font_size = 48
+outline_size = 12
+text = "Exit"

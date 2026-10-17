@@ -1,0 +1,126 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="Script" path="res://elements/enemies/enemy_creature.gd" id="1_creature"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wolf"]
+size = Vector3(0.5, 1, 1.9)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wolf_body"]
+size = Vector3(0.5, 0.45, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wolf_head"]
+size = Vector3(0.32, 0.3, 0.32)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wolf_snout"]
+size = Vector3(0.18, 0.14, 0.26)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wolf_small"]
+size = Vector3(0.07, 0.07, 0.05)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wolf_ear"]
+size = Vector3(0.08, 0.14, 0.06)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wolf_eye"]
+size = Vector3(0.05, 0.05, 0.02)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wolf_leg"]
+size = Vector3(0.12, 0.4, 0.12)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wolf_tail"]
+size = Vector3(0.1, 0.1, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wolf_fur"]
+albedo_color = Color(0.42, 0.44, 0.47, 1)
+roughness = 1.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wolf_dark"]
+albedo_color = Color(0.25, 0.26, 0.29, 1)
+roughness = 1.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wolf_eye"]
+albedo_color = Color(1, 0.15, 0.1, 1)
+emission_enabled = true
+emission = Color(1, 0.15, 0.1, 1)
+emission_energy_multiplier = 2.0
+
+[node name="Wolf" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 1
+script = ExtResource("1_creature")
+creature_name = "Wolf"
+max_health = 12
+attack_damage = 4
+wander_speed = 1.5
+chase_speed = 4.0
+detect_range = 9.0
+wander_radius = 4.0
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+position = Vector3(0, 0.5, -0.1)
+shape = SubResource("BoxShape3D_wolf")
+
+[node name="Body" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.6, 0)
+mesh = SubResource("BoxMesh_wolf_body")
+material_override = SubResource("StandardMaterial3D_wolf_fur")
+
+[node name="Head" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.9, -0.62)
+mesh = SubResource("BoxMesh_wolf_head")
+material_override = SubResource("StandardMaterial3D_wolf_fur")
+
+[node name="Snout" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.8, -0.9)
+mesh = SubResource("BoxMesh_wolf_snout")
+material_override = SubResource("StandardMaterial3D_wolf_dark")
+
+[node name="Nose" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.85, -1.04)
+mesh = SubResource("BoxMesh_wolf_small")
+material_override = SubResource("StandardMaterial3D_wolf_dark")
+
+[node name="EarLeft" type="MeshInstance3D" parent="."]
+position = Vector3(-0.1, 1.1, -0.6)
+mesh = SubResource("BoxMesh_wolf_ear")
+material_override = SubResource("StandardMaterial3D_wolf_dark")
+
+[node name="EarRight" type="MeshInstance3D" parent="."]
+position = Vector3(0.1, 1.1, -0.6)
+mesh = SubResource("BoxMesh_wolf_ear")
+material_override = SubResource("StandardMaterial3D_wolf_dark")
+
+[node name="EyeLeft" type="MeshInstance3D" parent="."]
+position = Vector3(-0.1, 0.95, -0.8)
+mesh = SubResource("BoxMesh_wolf_eye")
+material_override = SubResource("StandardMaterial3D_wolf_eye")
+
+[node name="EyeRight" type="MeshInstance3D" parent="."]
+position = Vector3(0.1, 0.95, -0.8)
+mesh = SubResource("BoxMesh_wolf_eye")
+material_override = SubResource("StandardMaterial3D_wolf_eye")
+
+[node name="LegFrontLeft" type="MeshInstance3D" parent="."]
+position = Vector3(-0.18, 0.2, -0.38)
+mesh = SubResource("BoxMesh_wolf_leg")
+material_override = SubResource("StandardMaterial3D_wolf_dark")
+
+[node name="LegFrontRight" type="MeshInstance3D" parent="."]
+position = Vector3(0.18, 0.2, -0.38)
+mesh = SubResource("BoxMesh_wolf_leg")
+material_override = SubResource("StandardMaterial3D_wolf_dark")
+
+[node name="LegBackLeft" type="MeshInstance3D" parent="."]
+position = Vector3(-0.18, 0.2, 0.38)
+mesh = SubResource("BoxMesh_wolf_leg")
+material_override = SubResource("StandardMaterial3D_wolf_dark")
+
+[node name="LegBackRight" type="MeshInstance3D" parent="."]
+position = Vector3(0.18, 0.2, 0.38)
+mesh = SubResource("BoxMesh_wolf_leg")
+material_override = SubResource("StandardMaterial3D_wolf_dark")
+
+[node name="Tail" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.75, 0.8)
+rotation = Vector3(-0.4, 0, 0)
+mesh = SubResource("BoxMesh_wolf_tail")
+material_override = SubResource("StandardMaterial3D_wolf_fur")

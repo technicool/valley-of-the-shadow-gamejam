@@ -1,0 +1,146 @@
+[gd_scene load_steps=19 format=3]
+
+[ext_resource type="Script" path="res://elements/enemies/enemy_creature.gd" id="1_creature"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_giant"]
+radius = 1.0
+height = 5.0
+
+[sub_resource type="BoxMesh" id="BoxMesh_giant_leg"]
+size = Vector3(0.8, 2, 0.9)
+
+[sub_resource type="BoxMesh" id="BoxMesh_giant_torso"]
+size = Vector3(2, 2, 1.2)
+
+[sub_resource type="BoxMesh" id="BoxMesh_giant_head"]
+size = Vector3(0.9, 0.9, 0.9)
+
+[sub_resource type="BoxMesh" id="BoxMesh_giant_helmet"]
+size = Vector3(1.1, 0.5, 1.1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_giant_crest"]
+size = Vector3(0.15, 0.3, 0.9)
+
+[sub_resource type="BoxMesh" id="BoxMesh_giant_eye"]
+size = Vector3(0.12, 0.08, 0.03)
+
+[sub_resource type="BoxMesh" id="BoxMesh_giant_arm"]
+size = Vector3(0.6, 2.2, 0.6)
+
+[sub_resource type="BoxMesh" id="BoxMesh_giant_shaft"]
+size = Vector3(0.12, 5, 0.12)
+
+[sub_resource type="BoxMesh" id="BoxMesh_giant_spearhead"]
+size = Vector3(0.25, 0.5, 0.05)
+
+[sub_resource type="BoxMesh" id="BoxMesh_giant_shield"]
+size = Vector3(0.2, 1.6, 1.1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_giant_skin"]
+albedo_color = Color(0.78, 0.62, 0.48, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_giant_tunic"]
+albedo_color = Color(0.48, 0.2, 0.17, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_giant_bronze"]
+albedo_color = Color(0.6, 0.48, 0.22, 1)
+metallic = 0.6
+roughness = 0.4
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_giant_wood"]
+albedo_color = Color(0.42, 0.27, 0.14, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_giant_steel"]
+albedo_color = Color(0.7, 0.72, 0.75, 1)
+metallic = 0.8
+roughness = 0.3
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_giant_eye"]
+albedo_color = Color(1, 0.3, 0.2, 1)
+emission_enabled = true
+emission = Color(1, 0.3, 0.2, 1)
+emission_energy_multiplier = 2.0
+
+[node name="Giant" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 1
+script = ExtResource("1_creature")
+creature_name = "Giant (Goliath)"
+max_health = 200
+attack_damage = 25
+wander_speed = 0.8
+chase_speed = 1.8
+detect_range = 12.0
+wander_radius = 4.0
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+position = Vector3(0, 2.5, 0)
+shape = SubResource("CapsuleShape3D_giant")
+
+[node name="LegLeft" type="MeshInstance3D" parent="."]
+position = Vector3(-0.5, 1, 0)
+mesh = SubResource("BoxMesh_giant_leg")
+material_override = SubResource("StandardMaterial3D_giant_skin")
+
+[node name="LegRight" type="MeshInstance3D" parent="."]
+position = Vector3(0.5, 1, 0)
+mesh = SubResource("BoxMesh_giant_leg")
+material_override = SubResource("StandardMaterial3D_giant_skin")
+
+[node name="Torso" type="MeshInstance3D" parent="."]
+position = Vector3(0, 3, 0)
+mesh = SubResource("BoxMesh_giant_torso")
+material_override = SubResource("StandardMaterial3D_giant_tunic")
+
+[node name="Head" type="MeshInstance3D" parent="."]
+position = Vector3(0, 4.45, 0)
+mesh = SubResource("BoxMesh_giant_head")
+material_override = SubResource("StandardMaterial3D_giant_skin")
+
+[node name="Helmet" type="MeshInstance3D" parent="."]
+position = Vector3(0, 4.85, 0)
+mesh = SubResource("BoxMesh_giant_helmet")
+material_override = SubResource("StandardMaterial3D_giant_bronze")
+
+[node name="Crest" type="MeshInstance3D" parent="."]
+position = Vector3(0, 5.25, 0)
+mesh = SubResource("BoxMesh_giant_crest")
+material_override = SubResource("StandardMaterial3D_giant_tunic")
+
+[node name="EyeLeft" type="MeshInstance3D" parent="."]
+position = Vector3(-0.2, 4.45, -0.47)
+mesh = SubResource("BoxMesh_giant_eye")
+material_override = SubResource("StandardMaterial3D_giant_eye")
+
+[node name="EyeRight" type="MeshInstance3D" parent="."]
+position = Vector3(0.2, 4.45, -0.47)
+mesh = SubResource("BoxMesh_giant_eye")
+material_override = SubResource("StandardMaterial3D_giant_eye")
+
+[node name="ArmLeft" type="MeshInstance3D" parent="."]
+position = Vector3(-1.3, 2.9, 0)
+mesh = SubResource("BoxMesh_giant_arm")
+material_override = SubResource("StandardMaterial3D_giant_skin")
+
+[node name="ArmRight" type="MeshInstance3D" parent="."]
+position = Vector3(1.3, 2.9, 0)
+mesh = SubResource("BoxMesh_giant_arm")
+material_override = SubResource("StandardMaterial3D_giant_skin")
+
+[node name="SpearShaft" type="MeshInstance3D" parent="."]
+position = Vector3(1.8, 2.5, -0.4)
+mesh = SubResource("BoxMesh_giant_shaft")
+material_override = SubResource("StandardMaterial3D_giant_wood")
+
+[node name="SpearHead" type="MeshInstance3D" parent="."]
+position = Vector3(1.8, 5.25, -0.4)
+mesh = SubResource("BoxMesh_giant_spearhead")
+material_override = SubResource("StandardMaterial3D_giant_steel")
+
+[node name="Shield" type="MeshInstance3D" parent="."]
+position = Vector3(-1.8, 2.6, -0.35)
+mesh = SubResource("BoxMesh_giant_shield")
+material_override = SubResource("StandardMaterial3D_giant_bronze")

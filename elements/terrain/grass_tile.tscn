@@ -1,0 +1,26 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://elements/terrain/terrain_tile.gd" id="1_tile"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_grass"]
+size = Vector3(2, 1, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_grass"]
+size = Vector3(2, 1, 2)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_grass"]
+albedo_color = Color(0.29, 0.541, 0.212, 1)
+roughness = 1.0
+
+[node name="GrassTile" type="StaticBody3D"]
+script = ExtResource("1_tile")
+terrain_type = "grass"
+
+[node name="Mesh" type="MeshInstance3D" parent="."]
+position = Vector3(0, -0.5, 0)
+mesh = SubResource("BoxMesh_grass")
+material_override = SubResource("StandardMaterial3D_grass")
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+position = Vector3(0, -0.5, 0)
+shape = SubResource("BoxShape3D_grass")

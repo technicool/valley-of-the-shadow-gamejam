@@ -17,6 +17,7 @@ var _pitch := -0.35
 
 
 func _ready() -> void:
+	add_to_group("player")
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	spring_arm.rotation.x = _pitch
 
