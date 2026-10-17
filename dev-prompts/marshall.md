@@ -14,3 +14,9 @@ Each level should be playable in about 30 seconds of travel with the character
 Use  Godot’s built-in `TileMapLayer` for the terrain and the debris, trees, enemeies, and other scenery. If there is a way to allow for variation dynamically, incorporate combined with `FastNoiseLite` to procedurally map out terrain or other randomness.
 
 Ensure the entrance/exit points are configurable for the levels (multiple exits to other levels)
+
+
+## Level seeding for 2 starts
+
+create 2 level tilemap files. the first should be the existing valley with high cliff edges, and a trail in the middle of a muddy valley path. the second should be a wide open field with a path that leds to it. Ensure that the main scene can load level 1 on start.
+

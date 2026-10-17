@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Valley of the Shadow"
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/start_menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [input]
