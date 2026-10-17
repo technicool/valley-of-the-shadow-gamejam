@@ -1,36 +1,47 @@
 extends Node3D
-## Places the player at the start of the road and marks the far end with a beacon.
+## Level controller coordinating LevelMapPopulator, player positioning,
+## and seamless transition between levels with multiple entrance and exit points.
 
-@onready var terrain: BlockTerrain = $Terrain
+@export var level_populator: LevelMapPopulator
+@export var current_entrance_id: String = "start"
+
 @onready var player: CharacterBody3D = $Player
 
 
 func _ready() -> void:
-	player.global_position = terrain.get_spawn_position()
-	_add_beacon(terrain.get_goal_position())
+	if not level_populator:
+		level_populator = get_node_or_null("LevelMapPopulator") as LevelMapPopulator
+
+	if level_populator:
+		level_populator.level_exit_triggered.connect(_on_level_exit_triggered)
+		spawn_player(current_entrance_id)
 
 
-func _add_beacon(at: Vector3) -> void:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.55, 0.3, 0.85)
-	mat.emission_enabled = true
-	mat.emission = Color(0.6, 0.35, 0.95)
-	mat.emission_energy_multiplier = 2.0
+func spawn_player(entrance_id: String) -> void:
+	if level_populator and player:
+		player.global_position = level_populator.get_entrance_world_pos(entrance_id)
+		player.velocity = Vector3.ZERO
 
-	var cylinder := CylinderMesh.new()
-	cylinder.top_radius = 0.2
-	cylinder.bottom_radius = 0.3
-	cylinder.height = 14.0
 
-	var beam := MeshInstance3D.new()
-	beam.mesh = cylinder
-	beam.material_override = mat
-	beam.position = at + Vector3(0.0, 7.0, 0.0)
-	add_child(beam)
+func _on_level_exit_triggered(exit_id: String, target_level_path: String, target_entrance_id: String) -> void:
+	# Exits fire inside the physics step, where rebuilding the level is not safe.
+	_change_level.call_deferred(exit_id, target_level_path, target_entrance_id)
 
-	var light := OmniLight3D.new()
-	light.light_color = Color(0.7, 0.45, 1.0)
-	light.light_energy = 2.0
-	light.omni_range = 12.0
-	light.position = at + Vector3(0.0, 2.0, 0.0)
-	add_child(light)
+
+func _change_level(exit_id: String, target_level_path: String, target_entrance_id: String) -> void:
+	print("Reached exit: ", exit_id, " -> Target: ", target_level_path, " [Entrance: ", target_entrance_id, "]")
+
+	if target_level_path != "" and ResourceLoader.exists(target_level_path):
+		var res: Resource = load(target_level_path)
+		if res is LevelData:
+			level_populator.level_data = res as LevelData
+			level_populator.rebuild_all()
+			spawn_player(target_entrance_id)
+			return
+		elif res is PackedScene:
+			get_tree().change_scene_to_packed(res as PackedScene)
+			return
+
+	# No valid target: return the player to the target entrance on this level.
+	spawn_player(target_entrance_id)
+

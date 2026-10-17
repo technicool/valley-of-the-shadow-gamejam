@@ -1,0 +1,33 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/level_map_populator.gd" id="1_populator"]
+[ext_resource type="Resource" path="res://levels/level_01.tres" id="2_level"]
+
+[sub_resource type="Environment" id="Environment_editor"]
+background_mode = 1
+background_color = Color(0.3, 0.34, 0.4, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.62, 0.66, 0.72, 1)
+ambient_light_energy = 0.9
+
+[node name="LevelEditor" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_editor")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-55, 35, 0)
+light_color = Color(1, 0.93, 0.82, 1)
+light_energy = 1.2
+shadow_enabled = true
+
+[node name="EditorCamera" type="Camera3D" parent="."]
+position = Vector3(0, 85, 25)
+rotation_degrees = Vector3(-75, 0, 0)
+current = true
+
+[node name="LevelMapPopulator" type="Node3D" parent="."]
+script = ExtResource("1_populator")
+level_data = ExtResource("2_level")
+
+[node name="TerrainTileMap" type="TileMapLayer" parent="LevelMapPopulator"]
