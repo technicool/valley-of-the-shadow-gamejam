@@ -17,6 +17,17 @@ const WEAPON_SCENES := {
 	"shadow_dagger": preload("res://elements/weapons/dagger.tscn"),
 	"sun_pendant": preload("res://elements/weapons/slingshot.tscn"),
 }
+const GUARD_CREATURE_SCENES: Array[PackedScene] = [
+	preload("res://elements/enemies/shadow_creature.tscn"),
+	preload("res://elements/enemies/wolf.tscn"),
+	preload("res://elements/enemies/bear.tscn"),
+]
+const LAMB_SCENE := preload("res://elements/npcs/lamb.tscn")
+const LAMB_COUNT := 6
+const LAMB_MIN_SPACING := 3.0
+const LAMB_MIN_START_DIST := 4.0
+const LAMB_MAX_START_DIST := 16.0
+const LAMB_GUARD_CLEARANCE := 8.0
 
 @export_group("Data & Generation")
 @export var level_data: LevelData:
@@ -142,12 +153,12 @@ func _ensure_tileset() -> void:
 	var source := TileSetAtlasSource.new()
 	var img := Image.create(16 * 6, 16, false, Image.FORMAT_RGBA8)
 	var colors := [
-		Color("#4a8a36"), # Grass
-		Color("#5a4030"), # Mud
-		Color("#6e6558"), # Debris
-		Color("#7d5f40"), # Dirt
-		Color("#555a64"), # Stone
-		Color("#284b7a"), # Water
+		Color("#6f7a3b"), # Grass (olive moss)
+		Color("#4a3828"), # Mud
+		Color("#8c7152"), # Debris
+		Color("#a57048"), # Dirt (ochre)
+		Color("#7f766c"), # Stone
+		Color("#3d5a70"), # Water
 	]
 	for idx in range(colors.size()):
 		var c: Color = colors[idx]
@@ -241,8 +252,8 @@ func _build_3d_terrain() -> void:
 
 	var mesh := ArrayMesh.new()
 	var colors := [
-		Color("#4a8a36"), Color("#5a4030"), Color("#6e6558"),
-		Color("#7d5f40"), Color("#555a64"), Color("#284b7a")
+		Color("#6f7a3b"), Color("#4a3828"), Color("#8c7152"),
+		Color("#a57048"), Color("#7f766c"), Color("#3d5a70")
 	]
 	var surface_idx := 0
 	for i in num_types:
@@ -292,13 +303,17 @@ func _populate_static_objects() -> void:
 
 	# Materials for scenery
 	var tree_trunk_mat := StandardMaterial3D.new()
-	tree_trunk_mat.albedo_color = Color("#3e2715")
+	tree_trunk_mat.albedo_color = Color("#4a3322")
 	var tree_leaves_mat := StandardMaterial3D.new()
-	tree_leaves_mat.albedo_color = Color("#294a20")
+	tree_leaves_mat.albedo_color = Color("#6b7a3f")
 	var rock_mat := StandardMaterial3D.new()
-	rock_mat.albedo_color = Color("#4b4e54")
+	rock_mat.albedo_color = Color("#6f6a64")
 	var pillar_mat := StandardMaterial3D.new()
-	pillar_mat.albedo_color = Color("#757570")
+	pillar_mat.albedo_color = Color("#d9c9a5")
+	var artifact_clay_mat := StandardMaterial3D.new()
+	artifact_clay_mat.albedo_color = Color("#b8784c")
+	var artifact_stone_mat := StandardMaterial3D.new()
+	artifact_stone_mat.albedo_color = Color("#e4d7b6")
 
 	for y in range(d):
 		for x in range(w):
@@ -321,11 +336,13 @@ func _populate_static_objects() -> void:
 					_spawn_debris_pile(spawn_pos, rock_mat, rng)
 				LevelData.ObjectType.RUIN_PILLAR:
 					_spawn_pillar(spawn_pos, pillar_mat, rng)
+				LevelData.ObjectType.RUIN_ARTIFACT:
+					_spawn_artifact(spawn_pos, artifact_clay_mat, artifact_stone_mat, rng)
 				LevelData.ObjectType.BUSH:
 					_spawn_bush(spawn_pos, tree_leaves_mat, rng)
 
 
-func _spawn_tree(pos: Vector3, trunk_mat: Material, leaves_mat: Material, rng: RandomNumberGenerator) -> void:
+func _spawn_tree(pos: Vector3, trunk_mat: Material, leaves_mat: Material, _rng: RandomNumberGenerator) -> void:
 	var tree_root := Node3D.new()
 	tree_root.position = pos
 
@@ -396,27 +413,122 @@ func _spawn_debris_pile(pos: Vector3, mat: Material, rng: RandomNumberGenerator)
 		_props_node.add_child(piece)
 
 
+## Ruin column: intact, broken, or fallen, chosen at random. Every variant is solid.
 func _spawn_pillar(pos: Vector3, mat: Material, rng: RandomNumberGenerator) -> void:
-	var pillar := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	var h := rng.randf_range(3.0, 5.0)
-	box.size = Vector3(0.8, h, 0.8)
-	pillar.mesh = box
-	pillar.material_override = mat
-	pillar.position = pos + Vector3(0, h * 0.5, 0)
-	pillar.rotation.y = rng.randf_range(-0.1, 0.1)
+	var root := StaticBody3D.new()
+	root.position = pos
+	root.rotation.y = rng.randf_range(0.0, TAU)
+	var variant := rng.randi() % 3
+	if variant == 0:
+		_build_intact_column(root, mat, rng.randf_range(2.6, 4.2))
+	elif variant == 1:
+		_build_broken_column(root, mat, rng.randf_range(1.0, 2.0))
+	else:
+		_build_fallen_column(root, mat)
+	_props_node.add_child(root)
 
-	var sb := StaticBody3D.new()
+
+func _build_intact_column(root: StaticBody3D, mat: Material, shaft_h: float) -> void:
+	var base_h := 0.3
+	var capital_h := 0.22
+	var total := base_h + shaft_h + capital_h
+	_add_part(root, _box_mesh(Vector3(0.95, base_h, 0.95)), mat, Vector3(0, base_h * 0.5, 0))
+	_add_part(root, _cylinder_mesh(0.28, 0.32, shaft_h), mat, Vector3(0, base_h + shaft_h * 0.5, 0))
+	_add_part(root, _box_mesh(Vector3(0.8, capital_h, 0.8)), mat, Vector3(0, total - capital_h * 0.5, 0))
+	_add_collider(root, _cylinder_shape(0.34, total), Vector3(0, total * 0.5, 0))
+
+
+## Broken column: short shaft with a jagged top chunk and a fallen block at its foot.
+func _build_broken_column(root: StaticBody3D, mat: Material, shaft_h: float) -> void:
+	var base_h := 0.3
+	var top_y := base_h + shaft_h
+	_add_part(root, _box_mesh(Vector3(0.95, base_h, 0.95)), mat, Vector3(0, base_h * 0.5, 0))
+	_add_part(root, _cylinder_mesh(0.28, 0.32, shaft_h), mat, Vector3(0, base_h + shaft_h * 0.5, 0))
+	_add_part(root, _box_mesh(Vector3(0.5, 0.35, 0.45)), mat, Vector3(0.12, top_y + 0.05, 0), Vector3(0, 0, 0.35))
+	_add_part(root, _box_mesh(Vector3(0.6, 0.25, 0.55)), mat, Vector3(-0.75, 0.13, 0.35), Vector3(0, 0.5, 0))
+	_add_collider(root, _cylinder_shape(0.32, top_y), Vector3(0, top_y * 0.5, 0))
+
+
+## Fallen column: shaft lying on the ground with a broken capital beside it.
+func _build_fallen_column(root: StaticBody3D, mat: Material) -> void:
+	var length := 3.0
+	var radius := 0.3
+	var lay := Vector3(0, 0, PI * 0.5)
+	_add_part(root, _cylinder_mesh(radius, radius, length), mat, Vector3(0, radius, 0), lay)
+	_add_part(root, _box_mesh(Vector3(0.7, 0.3, 0.7)), mat, Vector3(1.9, 0.15, 0.2))
+	_add_collider(root, _cylinder_shape(radius, length), Vector3(0, radius, 0), lay)
+
+
+## Small ruin artifacts: urn, tablet, statue head, or cracked bowl. Decor only, with no collision, so they never block routes.
+func _spawn_artifact(pos: Vector3, clay_mat: Material, stone_mat: Material, rng: RandomNumberGenerator) -> void:
+	var root := Node3D.new()
+	root.position = pos
+	root.rotation.y = rng.randf_range(0.0, TAU)
+	var kind := rng.randi() % 4
+	if kind == 0:
+		# Clay urn: squat body with a narrow neck
+		_add_part(root, _sphere_mesh(0.22, 0.44), clay_mat, Vector3(0, 0.22, 0))
+		_add_part(root, _cylinder_mesh(0.1, 0.1, 0.14), clay_mat, Vector3(0, 0.51, 0))
+	elif kind == 1:
+		# Standing inscribed tablet, tilted
+		_add_part(root, _box_mesh(Vector3(0.5, 0.6, 0.12)), stone_mat, Vector3(0, 0.3, 0), Vector3(-0.12, 0, 0))
+	elif kind == 2:
+		# Broken statue head on a stub
+		_add_part(root, _box_mesh(Vector3(0.3, 0.2, 0.3)), stone_mat, Vector3(0, 0.1, 0))
+		_add_part(root, _sphere_mesh(0.2, 0.4), stone_mat, Vector3(0, 0.4, 0))
+	else:
+		# Cracked bowl with a shard beside it
+		_add_part(root, _cylinder_mesh(0.45, 0.28, 0.3), clay_mat, Vector3(0, 0.15, 0))
+		_add_part(root, _box_mesh(Vector3(0.18, 0.1, 0.14)), stone_mat, Vector3(0.55, 0.05, 0.2), Vector3(0, 0.6, 0))
+	_props_node.add_child(root)
+
+
+func _add_part(root: Node3D, mesh: Mesh, mat: Material, offset: Vector3, euler: Vector3 = Vector3.ZERO) -> void:
+	var part := MeshInstance3D.new()
+	part.mesh = mesh
+	part.material_override = mat
+	part.position = offset
+	part.rotation = euler
+	root.add_child(part)
+
+
+func _add_collider(root: StaticBody3D, shape: Shape3D, offset: Vector3, euler: Vector3 = Vector3.ZERO) -> void:
 	var col := CollisionShape3D.new()
-	var shape := BoxShape3D.new()
-	shape.size = box.size
 	col.shape = shape
-	sb.add_child(col)
-	pillar.add_child(sb)
-	_props_node.add_child(pillar)
+	col.position = offset
+	col.rotation = euler
+	root.add_child(col)
 
 
-func _spawn_bush(pos: Vector3, mat: Material, rng: RandomNumberGenerator) -> void:
+func _box_mesh(size: Vector3) -> BoxMesh:
+	var m := BoxMesh.new()
+	m.size = size
+	return m
+
+
+func _cylinder_mesh(top_r: float, bottom_r: float, height: float) -> CylinderMesh:
+	var m := CylinderMesh.new()
+	m.top_radius = top_r
+	m.bottom_radius = bottom_r
+	m.height = height
+	return m
+
+
+func _sphere_mesh(radius: float, height: float) -> SphereMesh:
+	var m := SphereMesh.new()
+	m.radius = radius
+	m.height = height
+	return m
+
+
+func _cylinder_shape(radius: float, height: float) -> CylinderShape3D:
+	var s := CylinderShape3D.new()
+	s.radius = radius
+	s.height = height
+	return s
+
+
+func _spawn_bush(pos: Vector3, mat: Material, _rng: RandomNumberGenerator) -> void:
 	var bush := MeshInstance3D.new()
 	var sphere := SphereMesh.new()
 	sphere.radius = 0.5
@@ -442,6 +554,9 @@ func _populate_gameplay_elements() -> void:
 	# 3. Level Exits
 	for exit_item: LevelExitData in level_data.exits:
 		_create_exit_portal(exit_item)
+
+	# 4. Wandering lambs
+	_populate_lambs()
 
 
 func _create_weapon_pickup(info: Dictionary) -> void:
@@ -469,30 +584,8 @@ func _create_enemy_guard_zone(info: Dictionary) -> void:
 	zone_node.name = "GuardZone_" + str(info.get("id", "zone"))
 	zone_node.position = guard_world
 
-	# Enemy representative mesh / stand-in (or instance enemy_guard_scene if provided)
-	var enemy_body := CharacterBody3D.new()
-	enemy_body.name = "Enemy_" + str(info.get("id", "guard"))
-	var enemy_col := CollisionShape3D.new()
-	var cap_shape := CapsuleShape3D.new()
-	cap_shape.radius = 0.5
-	cap_shape.height = 2.2
-	enemy_col.shape = cap_shape
-	enemy_col.position = Vector3(0, 1.1, 0)
-	enemy_body.add_child(enemy_col)
-
-	var enemy_visual := MeshInstance3D.new()
-	var enemy_mesh := CapsuleMesh.new()
-	enemy_mesh.radius = 0.5
-	enemy_mesh.height = 2.2
-	enemy_visual.mesh = enemy_mesh
-	var enemy_mat := StandardMaterial3D.new()
-	enemy_mat.albedo_color = Color(0.85, 0.15, 0.15)
-	enemy_mat.emission_enabled = true
-	enemy_mat.emission = Color(0.6, 0.05, 0.05)
-	enemy_mat.emission_energy_multiplier = 0.8
-	enemy_visual.material_override = enemy_mat
-	enemy_visual.position = Vector3(0, 1.1, 0)
-	enemy_body.add_child(enemy_visual)
+	# Guard creature, randomly picked on every load (enemy_guard_scene overrides when set)
+	var enemy_body := _instantiate_guard_creature(info)
 	zone_node.add_child(enemy_body)
 
 	# Guard area radius visual / detection circle
@@ -540,6 +633,69 @@ func _create_enemy_guard_zone(info: Dictionary) -> void:
 			zone_node.add_child(barrier)
 
 	_gameplay_node.add_child(zone_node)
+
+
+func _instantiate_guard_creature(info: Dictionary) -> CharacterBody3D:
+	var scene: PackedScene = enemy_guard_scene
+	if scene == null:
+		var rng := RandomNumberGenerator.new()
+		rng.randomize()
+		scene = GUARD_CREATURE_SCENES[rng.randi() % GUARD_CREATURE_SCENES.size()]
+	var enemy_body := scene.instantiate() as CharacterBody3D
+	enemy_body.name = "Enemy_" + str(info.get("id", "guard"))
+	return enemy_body
+
+
+## Scatters lambs on open grass near the start, away from guard zones and each other.
+func _populate_lambs() -> void:
+	var start: Vector2i = level_data.entrances.get("start", Vector2i.ZERO)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = world_seed + 417
+
+	var candidates: Array[Vector2i] = []
+	for y in level_data.depth:
+		for x in level_data.width:
+			if level_data.get_cell_terrain(x, y) != LevelData.TerrainType.GRASS:
+				continue
+			if level_data.get_cell_object(x, y) != LevelData.ObjectType.NONE:
+				continue
+			var from_start := Vector2(x - start.x, y - start.y).length()
+			if from_start < LAMB_MIN_START_DIST or from_start > LAMB_MAX_START_DIST:
+				continue
+			if _is_near_guard(Vector2i(x, y)):
+				continue
+			candidates.append(Vector2i(x, y))
+
+	var placed: Array[Vector2i] = []
+	var attempts := 0
+	while placed.size() < LAMB_COUNT and not candidates.is_empty() and attempts < 500:
+		attempts += 1
+		var pick: Vector2i = candidates[rng.randi() % candidates.size()]
+		if _is_too_close(pick, placed):
+			continue
+		placed.append(pick)
+
+	for i in placed.size():
+		var cell: Vector2i = placed[i]
+		var lamb := LAMB_SCENE.instantiate() as Node3D
+		lamb.name = "Lamb_%d" % i
+		lamb.position = level_data.get_world_pos(cell.x, cell.y)
+		_gameplay_node.add_child(lamb)
+
+
+func _is_near_guard(cell: Vector2i) -> bool:
+	for guard_data: Dictionary in level_data.enemy_guard_zones:
+		var guard_pos: Vector2i = guard_data.get("guard_pos", Vector2i.ZERO)
+		if Vector2(cell).distance_to(Vector2(guard_pos)) < LAMB_GUARD_CLEARANCE:
+			return true
+	return false
+
+
+func _is_too_close(cell: Vector2i, others: Array[Vector2i]) -> bool:
+	for other in others:
+		if Vector2(cell).distance_to(Vector2(other)) < LAMB_MIN_SPACING:
+			return true
+	return false
 
 
 func _create_exit_portal(exit_item: LevelExitData) -> void:

@@ -4,7 +4,8 @@ extends Resource
 ## enemy guard regions, and configurable entrance/exit connectors.
 
 enum TerrainType { GRASS, MUD, DEBRIS, DIRT, STONE, WATER }
-enum ObjectType { NONE, ROCK_SMALL, ROCK_LARGE, TREE, BUSH, DEBRIS_PILE, RUIN_PILLAR }
+## Append-only: stored as integers in level resources.
+enum ObjectType { NONE, ROCK_SMALL, ROCK_LARGE, TREE, BUSH, DEBRIS_PILE, RUIN_PILLAR, RUIN_ARTIFACT }
 
 @export_group("Map Dimensions")
 @export var width: int = 80

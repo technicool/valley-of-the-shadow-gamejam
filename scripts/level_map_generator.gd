@@ -23,6 +23,10 @@ var cell_size: float = 1.0
 const GATE_RING_RADIUS := 4
 const GATE_HALF_WIDTH := 1
 const GUARD_SETBACK := 2
+## Max elevation step difference between neighbors on linear paths. Values above 1 build cliffs the player cannot climb.
+const LINEAR_CLIFF_MAX_STEPS := 3
+## Ruin-site noise above this value marks a cluster of ruins on the valley shoulders.
+const RUIN_SITE_THRESHOLD := 0.62
 const SOLID_OBJECTS := [
 	LevelData.ObjectType.TREE,
 	LevelData.ObjectType.ROCK_LARGE,
@@ -34,6 +38,7 @@ const SOLID_OBJECTS := [
 var _noise_height: FastNoiseLite
 var _noise_detail: FastNoiseLite
 var _noise_objects: FastNoiseLite
+var _noise_ruins: FastNoiseLite
 var _rng: RandomNumberGenerator
 
 
@@ -41,6 +46,7 @@ func _init() -> void:
 	_noise_height = FastNoiseLite.new()
 	_noise_detail = FastNoiseLite.new()
 	_noise_objects = FastNoiseLite.new()
+	_noise_ruins = FastNoiseLite.new()
 	_rng = RandomNumberGenerator.new()
 
 
@@ -68,7 +74,7 @@ func generate(p_mode: GenerationMode, p_seed: int = 1337, p_width: int = 80, p_d
 		GenerationMode.SIDE_QUEST_MAZE:
 			_generate_maze(data)
 
-	_limit_slopes(data)
+	_limit_slopes(data, LINEAR_CLIFF_MAX_STEPS if mode == GenerationMode.LINEAR_PATH else 1)
 	_add_guard_gates(data)
 	return data
 
@@ -88,6 +94,10 @@ func _setup_noise() -> void:
 	_noise_objects.cellular_distance_function = FastNoiseLite.DISTANCE_EUCLIDEAN
 	_noise_objects.frequency = 0.12
 
+	_noise_ruins.seed = seed_val + 303
+	_noise_ruins.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	_noise_ruins.frequency = 0.045
+
 
 func _path_center_x(y: float) -> float:
 	var half_d := map_depth * 0.5
@@ -102,8 +112,10 @@ func _generate_linear_path(data: LevelData) -> void:
 	var main_exit_pos := Vector2i(int(_path_center_x(exit_y)), exit_y)
 
 	data.entrances["start"] = start_pos
-	# Return point used when the player comes back from a sidequest map.
-	data.entrances["from_sidequest"] = Vector2i(clampi(int(_path_center_x(40)) + 26, 4, map_width - 5), 41)
+	var side_exit_pos := Vector2i(clampi(int(_path_center_x(40)) + 26, 4, map_width - 5), 40)
+	# Return point used when the player comes back from a sidequest map. Placed four cells
+	# short of the side exit so the return does not land on the exit portal.
+	data.entrances["from_sidequest"] = Vector2i(side_exit_pos.x - 4, 41)
 
 	var main_exit := LevelExitData.new()
 	main_exit.id = "exit_main"
@@ -113,7 +125,6 @@ func _generate_linear_path(data: LevelData) -> void:
 	data.exits.append(main_exit)
 
 	# Optional side quest branch exit halfway through
-	var side_exit_pos := Vector2i(clampi(int(_path_center_x(40)) + 26, 4, map_width - 5), 40)
 	var side_exit := LevelExitData.new()
 	side_exit.id = "exit_sidequest"
 	side_exit.grid_pos = side_exit_pos
@@ -134,9 +145,10 @@ func _generate_linear_path(data: LevelData) -> void:
 				dist_to_path = minf(dist_to_path, absf(float(y) - 40.0))
 
 			var n := (_noise_height.get_noise_2d(float(x), float(y)) + 1.0) * 0.5
-			var hills := 2.0 + 8.0 * n * n
+			# Ridges rise steeply (up to about 16 m) within a few cells of the path.
+			var hills := 4.0 + 12.0 * n * n
 			var path_elev := 1.0 + 0.8 * sin(float(y) * 0.08)
-			var blend := smoothstep(2.5, 9.0, dist_to_path)
+			var blend := smoothstep(2.5, 5.0, dist_to_path)
 			var elevation := lerpf(path_elev, hills, blend)
 
 			# Perimeter rim walls
@@ -144,7 +156,7 @@ func _generate_linear_path(data: LevelData) -> void:
 			if edge_dist < 6.0 and not _is_near_exit_or_entrance(Vector2i(x, y), data):
 				elevation += (6.0 - edge_dist) * 1.8
 
-			var elev_int := clampi(int(round(elevation / step_height)), 0, 30)
+			var elev_int := clampi(int(round(elevation / step_height)), 0, 40)
 			data.set_cell_elevation(x, y, elev_int)
 
 			# Terrain type
@@ -152,9 +164,9 @@ func _generate_linear_path(data: LevelData) -> void:
 			var terrain := LevelData.TerrainType.DIRT
 			if t_dist < 2.5:
 				terrain = LevelData.TerrainType.GRASS
-			elif t_dist < 4.5:
+			elif t_dist < 3.5:
 				terrain = LevelData.TerrainType.MUD
-			elif t_dist < 7.5:
+			elif t_dist < 5.5:
 				terrain = LevelData.TerrainType.DEBRIS
 			data.set_cell_terrain(x, y, terrain)
 
@@ -169,6 +181,13 @@ func _generate_linear_path(data: LevelData) -> void:
 					data.set_cell_object(x, y, LevelData.ObjectType.ROCK_LARGE)
 				elif terrain == LevelData.TerrainType.MUD and obj_val > 0.6:
 					data.set_cell_object(x, y, LevelData.ObjectType.BUSH)
+				elif t_dist > 5.0 and _noise_ruins.get_noise_2d(float(x), float(y)) > RUIN_SITE_THRESHOLD:
+					# Ruin clusters on the shoulders: mostly broken columns, with scattered artifacts.
+					var roll := _rng.randf()
+					if roll < 0.25:
+						data.set_cell_object(x, y, LevelData.ObjectType.RUIN_PILLAR)
+					elif roll < 0.45:
+						data.set_cell_object(x, y, LevelData.ObjectType.RUIN_ARTIFACT)
 
 	# Gameplay zones: Weapon spawn midway along side branch or shoulder
 	data.weapon_spawns.append({
@@ -406,7 +425,8 @@ func _can_step(data: LevelData, from: Vector2i, to: Vector2i, goal: Vector2i) ->
 	return true
 
 
-func _limit_slopes(data: LevelData) -> void:
+## Clamps each cell so it is at most `max_step_diff` steps above any neighbor.
+func _limit_slopes(data: LevelData, max_step_diff: int) -> void:
 	var total := data.width * data.depth
 	var top := 0
 	for i in total:
@@ -430,6 +450,6 @@ func _limit_slopes(data: LevelData) -> void:
 					if (di == 0 and dj == 0) or ni < 0 or nj < 0 or ni >= data.width or nj >= data.depth:
 						continue
 					var n: int = nj * data.width + ni
-					if data.elevation_cells[n] > level + 1:
-						data.elevation_cells[n] = level + 1
-						buckets[level + 1].append(n)
+					if data.elevation_cells[n] > level + max_step_diff:
+						data.elevation_cells[n] = level + max_step_diff
+						buckets[level + max_step_diff].append(n)

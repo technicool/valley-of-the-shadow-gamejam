@@ -1,0 +1,74 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://elements/npcs/lamb.gd" id="1_lamb"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_lamb"]
+radius = 0.35
+height = 0.9
+
+[sub_resource type="SphereMesh" id="SphereMesh_lamb_body"]
+radius = 0.42
+height = 0.84
+
+[sub_resource type="SphereMesh" id="SphereMesh_lamb_head"]
+radius = 0.2
+height = 0.4
+
+[sub_resource type="SphereMesh" id="SphereMesh_lamb_tail"]
+radius = 0.09
+height = 0.18
+
+[sub_resource type="BoxMesh" id="BoxMesh_lamb_leg"]
+size = Vector3(0.12, 0.45, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_lamb_wool"]
+albedo_color = Color(0.93, 0.9, 0.82, 1)
+roughness = 1.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_lamb_dark"]
+albedo_color = Color(0.22, 0.19, 0.16, 1)
+roughness = 1.0
+
+[node name="Lamb" type="CharacterBody3D"]
+collision_layer = 16
+collision_mask = 17
+script = ExtResource("1_lamb")
+
+[node name="Collision" type="CollisionShape3D" parent="."]
+position = Vector3(0, 0.45, 0)
+shape = SubResource("CapsuleShape3D_lamb")
+
+[node name="Body" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.8, 0, 0, 0, 1.35, 0, 0.5, 0)
+mesh = SubResource("SphereMesh_lamb_body")
+material_override = SubResource("StandardMaterial3D_lamb_wool")
+
+[node name="Head" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.78, -0.62)
+mesh = SubResource("SphereMesh_lamb_head")
+material_override = SubResource("StandardMaterial3D_lamb_dark")
+
+[node name="Tail" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.6, 0.56)
+mesh = SubResource("SphereMesh_lamb_tail")
+material_override = SubResource("StandardMaterial3D_lamb_wool")
+
+[node name="LegFrontLeft" type="MeshInstance3D" parent="."]
+position = Vector3(-0.2, 0.225, -0.36)
+mesh = SubResource("BoxMesh_lamb_leg")
+material_override = SubResource("StandardMaterial3D_lamb_dark")
+
+[node name="LegFrontRight" type="MeshInstance3D" parent="."]
+position = Vector3(0.2, 0.225, -0.36)
+mesh = SubResource("BoxMesh_lamb_leg")
+material_override = SubResource("StandardMaterial3D_lamb_dark")
+
+[node name="LegBackLeft" type="MeshInstance3D" parent="."]
+position = Vector3(-0.2, 0.225, 0.36)
+mesh = SubResource("BoxMesh_lamb_leg")
+material_override = SubResource("StandardMaterial3D_lamb_dark")
+
+[node name="LegBackRight" type="MeshInstance3D" parent="."]
+position = Vector3(0.2, 0.225, 0.36)
+mesh = SubResource("BoxMesh_lamb_leg")
+material_override = SubResource("StandardMaterial3D_lamb_dark")
